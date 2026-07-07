@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
+    <title>3D Badminton Game</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- タイトルへ戻るボタン（常時表示、初期は非表示） -->
+    <button id="back-to-title" style="display: none;">タイトルへ戻る</button>
+
+    <div id="start-screen">
+        <h1>3D BADMINTON</h1>
+        <p>
+            手前のプレイヤー（赤）を操作して、奥のNPC（青）と対戦します。<br><br>
+            <strong>【操作方法】</strong><br>
+            ・移動: 左下ジョイスティック or WASD / 矢印キー<br>
+            ・ショット: 右下のオレンジボタン or スペースキー<br><br>
+            ※ボタン長押しでパワーが溜まり、半分以上で<strong>ジャンプスマッシュ</strong>を放ちます！
+        </p>
+        <div class="level-select">
+            <button class="start-btn" data-level="1">LEVEL 1 (EASY)</button>
+            <button class="start-btn" data-level="2">LEVEL 2 (HARD)</button>
+        </div>
+    </div>
+
+    <div id="result-screen" style="display: none;">
+        <div class="result-content">
+            <h2 id="result-title">YOU WIN!</h2>
+            <div id="result-score">21 - 15</div>
+        </div>
+    </div>
+
+    <div id="ui-layer" style="display: none;">
+        <div id="scoreboard">
+            <div class="score-box" id="player-score-box">
+                <div class="score-label">PLAYER</div>
+                <div class="score-value" id="player-score">0</div>
+            </div>
+            <div class="score-box" id="npc-score-box">
+                <div class="score-label">NPC</div>
+                <div class="score-value" id="npc-score">0</div>
+            </div>
+        </div>
+        <div id="message-banner">POINT FOR YOU</div>
+        <div id="controls-container">
+            <div id="joystick-zone"><div id="joystick-handle"></div></div>
+            <div id="action-zone">
+                <div id="power-meter"><div id="power-fill"></div></div>
+                <div id="hit-button"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="physics.js"></script>
+    <script src="player.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
