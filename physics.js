@@ -35,5 +35,24 @@ const BadmintonPhysics = {
         direction.normalize();
         
         shuttlePhys.vel.copy(direction).multiplyScalar(speedFactor);
+    },
+
+    // 新規追加：ネット際にふんわりと沈めるドロップショット用の物理計算
+    calculateDrop(start, target, peakHeight, shuttlePhys) {
+        const displacement = new THREE.Vector3().subVectors(target, start);
+        const g = -this.gravity;
+        // ネットをぎりぎり越える軌道を作るため、打点に応じた低いピーク高さを設定
+        const h = Math.max(peakHeight, start.y + 0.1);
+        const t1 = Math.sqrt((2 * (h - start.y)) / g);
+        const t2 = Math.sqrt((2 * h) / g);
+        const totalTime = t1 + t2;
+        
+        const vx = displacement.x / totalTime;
+        const vz = displacement.z / totalTime;
+        const vy = g * t1;
+        
+        shuttlePhys.vel.set(vx, vy, vz);
+        // ロブよりも初速の増幅を抑え（1.03倍）、ふんわりと手前で失速させる
+        shuttlePhys.vel.multiplyScalar(1.03);
     }
 };

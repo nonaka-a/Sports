@@ -561,18 +561,30 @@ const GameCore = {
     },
 
     hitShuttle(hitter, hitPower) {
-        const isSmash = (hitPower >= 50);
+        // 下キー(s)が押されている場合は、スマッシュのパワーに達していてもドロップショットを優先
+        const isDrop = (hitter === 'player' && keys.s);
+        const isSmash = (!isDrop && hitPower >= 50);
+        
         BadmintonAudio.playHit(isSmash);
         
         if (hitter === 'player') {
             this.playerSwingTime = 0;
+            // 左右の狙い位置分け
             let tx = (keys.a) ? -4.2 : (keys.d) ? 4.2 : (Math.random() - 0.5) * 1.5;
-            let tz = -this.courtLength / 2 + 1.2 + Math.random() * 2.0;
 
-            if (isSmash) {
+            if (isDrop) {
+                // ドロップ：相手側コートのネット際（z = -2.0 〜 -3.2 付近）をターゲットにふんわり落とす
+                let tz = -2.0 - Math.random() * 1.2;
+                // ピーク高さはネット高さの少し上の2.4m程度に設定してスレスレを狙う
+                BadmintonPhysics.calculateDrop(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 2.4, this.shuttlePhys);
+            } else if (isSmash) {
+                // スマッシュ：相手側コート奥に鋭く叩きつける
+                let tz = -this.courtLength / 2 + 1.2 + Math.random() * 2.0;
                 const jumpHitPoint = new THREE.Vector3(this.playerGroup.position.x, 2.3 + (PlayerManager.jumpY * 0.5), this.playerGroup.position.z);
                 BadmintonPhysics.calculateSmash(jumpHitPoint, new THREE.Vector3(tx, 0.1, tz), hitPower, this.shuttlePhys);
             } else {
+                // 通常のクリア・ロブ
+                let tz = -this.courtLength / 2 + 1.2 + Math.random() * 2.0;
                 BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 5.5, this.shuttlePhys);
             }
             PlayerManager.npcHasHitRight = true; PlayerManager.isAirborneWaiting = false;
