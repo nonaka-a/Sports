@@ -1,11 +1,17 @@
 const BadmintonAudio = {
     hitSound: null,
-    smashSound: null,
+    smashSounds: [],
+    isMuted: false,
     init() {
         this.hitSound = new Audio('sounds/hit_soft1.mp3');
         this.hitSound.preload = 'auto';
-        this.smashSound = new Audio('sounds/hit3.mp3');
-        this.smashSound.preload = 'auto';
+        
+        const fileNames = ['sounds/Hit1.mp3', 'sounds/hit2.mp3', 'sounds/hit3.mp3'];
+        this.smashSounds = fileNames.map(path => {
+            const audio = new Audio(path);
+            audio.preload = 'auto';
+            return audio;
+        });
         
         const unlock = () => {
             const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -17,7 +23,18 @@ const BadmintonAudio = {
         window.addEventListener('click', unlock);
     },
     playHit(isSmash = false) {
-        const sound = isSmash ? this.smashSound : this.hitSound;
+        if (this.isMuted) return;
+        
+        let sound;
+        if (isSmash) {
+            if (this.smashSounds.length > 0) {
+                const idx = Math.floor(Math.random() * this.smashSounds.length);
+                sound = this.smashSounds[idx];
+            }
+        } else {
+            sound = this.hitSound;
+        }
+        
         if (!sound) return;
         try {
             const clone = sound.cloneNode();

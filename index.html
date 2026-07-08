@@ -11,32 +11,46 @@
 <body>
     <div id="canvas-container"></div>
 
-    <!-- タイトルへ戻るボタン（常時表示、初期は非表示） -->
-    <button id="back-to-title" style="display: none;">タイトルへ戻る</button>
+    <!-- 設定メニュー（一時停止） -->
+    <div id="settings-menu" style="display: none;">
+        <div class="menu-content">
+            <h2>PAUSED</h2>
+            
+            <div class="settings-options">
+                <button id="toggle-audio-btn" class="menu-option-btn">音 ON</button>
+                <button id="toggle-fullscreen-btn" class="menu-option-btn">全画面</button>
+            </div>
+            
+            <button id="resume-btn" class="menu-btn">再開</button>
+            <button id="menu-back-to-title" class="menu-btn danger">タイトルへ戻る</button>
+        </div>
+    </div>
 
+    <!-- スタート画面 -->
     <div id="start-screen">
         <h1>3D BADMINTON</h1>
-        <p>
-            手前のプレイヤー（赤）を操作して、奥のNPC（青）と対戦します。<br><br>
-            <strong>【操作方法】</strong><br>
-            ・移動: 左下ジョイスティック or WASD / 矢印キー<br>
-            ・ショット: 右下のオレンジボタン or スペースキー<br><br>
-            ※ボタン長押しでパワーが溜まり、半分以上で<strong>ジャンプスマッシュ</strong>を放ちます！
-        </p>
         <div class="level-select">
             <button class="start-btn" data-level="1">LEVEL 1 (EASY)</button>
             <button class="start-btn" data-level="2">LEVEL 2 (HARD)</button>
         </div>
     </div>
 
+    <!-- リザルト画面 -->
     <div id="result-screen" style="display: none;">
         <div class="result-content">
             <h2 id="result-title">YOU WIN!</h2>
             <div id="result-score">21 - 15</div>
+            <button id="result-back-to-title" class="menu-btn">タイトルへ戻る</button>
         </div>
     </div>
 
+    <!-- プレイ中UI -->
     <div id="ui-layer" style="display: none;">
+        <!-- 設定ボタンを ui-layer 内に配置 -->
+        <div id="settings-btn">
+            <img src="images/haguruma.png" alt="Settings">
+        </div>
+        
         <div id="scoreboard">
             <div class="score-box" id="player-score-box">
                 <div class="score-label">PLAYER</div>
@@ -49,7 +63,20 @@
         </div>
         <div id="message-banner">POINT FOR YOU</div>
         <div id="controls-container">
-            <div id="joystick-zone"><div id="joystick-handle"></div></div>
+            <div id="dpad-zone">
+                <div class="dpad-btn" id="dpad-up">
+                    <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h16z" fill="#444444"/></svg>
+                </div>
+                <div class="dpad-btn" id="dpad-left">
+                    <svg viewBox="0 0 24 24"><path d="M4 12l8 8v-16z" fill="#444444"/></svg>
+                </div>
+                <div class="dpad-btn" id="dpad-right">
+                    <svg viewBox="0 0 24 24"><path d="M20 12l-8-8v16z" fill="#444444"/></svg>
+                </div>
+                <div class="dpad-btn" id="dpad-down">
+                    <svg viewBox="0 0 24 24"><path d="M12 20l8-8h-16z" fill="#444444"/></svg>
+                </div>
+            </div>
             <div id="action-zone">
                 <div id="power-meter"><div id="power-fill"></div></div>
                 <div id="hit-button"></div>
@@ -60,6 +87,7 @@
     <script src="audio.js"></script>
     <script src="physics.js"></script>
     <script src="player.js"></script>
+    <script src="ui.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
