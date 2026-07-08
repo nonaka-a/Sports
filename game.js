@@ -607,6 +607,12 @@ const GameCore = {
 
     scorePoint(winner) {
         gameState = 'ended';
+        
+        // 得点確定時にランダム歓声を再生
+        if (typeof BadmintonAudio !== 'undefined') {
+            BadmintonAudio.playCheer();
+        }
+
         if (winner === 'player') { 
             playerScore++; document.getElementById('player-score').innerText = playerScore; this.showBanner("POINT FOR YOU!", "#34c759"); 
         } else { 
