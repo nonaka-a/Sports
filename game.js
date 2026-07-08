@@ -84,59 +84,237 @@ const GameCore = {
         this.animate();
     },
 
-    buildField() {
-        const groundGeo = new THREE.PlaneGeometry(100, 100);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e6135, roughness: 0.95 });
+  buildField() {
+        // グラウンド（体育館の床）
+        const groundGeo = new THREE.PlaneGeometry(120, 120);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x1d3a24, roughness: 0.9 });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         this.scene.add(ground);
 
+        // バドミントンコート床面
         const courtGeo = new THREE.PlaneGeometry(this.courtWidth, this.courtLength);
-        const courtMat = new THREE.MeshStandardMaterial({ color: 0x2c75b0, roughness: 0.5 });
+        const courtMat = new THREE.MeshStandardMaterial({ color: 0x1b5e3a, roughness: 0.6, metalness: 0.1 });
         const court = new THREE.Mesh(courtGeo, courtMat);
         court.rotation.x = -Math.PI / 2;
         court.position.y = 0.01;
         this.scene.add(court);
 
-        const createL = (w, h, x, z) => {
+        // 白線描画ユーティリティ
+        const createLineMesh = (w, h, x, z) => {
             const geo = new THREE.PlaneGeometry(w, h);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
             const m = new THREE.Mesh(geo, mat);
             m.rotation.x = -Math.PI / 2; 
             m.position.set(x, 0.015, z);
             this.scene.add(m);
         };
-        const lw = 0.12;
-        createL(this.courtWidth, lw, 0, -this.courtLength/2);
-        createL(this.courtWidth, lw, 0, this.courtLength/2);
-        createL(lw, this.courtLength, -this.courtWidth/2, 0);
-        createL(lw, this.courtLength, this.courtWidth/2, 0);
-        createL(lw, this.courtLength, 0, 0);
-        createL(this.courtWidth, lw, 0, -3);
-        createL(this.courtWidth, lw, 0, 3);
-        createL(this.courtWidth, lw, 0, 0);
 
+        const lw = 0.08; // 実際の白線の太さ比率に合わせた調整
+        const halfW = this.courtWidth / 2;
+        const halfL = this.courtLength / 2;
+
+        // 1. バックバウンダリーライン（エンドライン）
+        createLineMesh(this.courtWidth, lw, 0, -halfL);
+        createLineMesh(this.courtWidth, lw, 0, halfL);
+
+        // 2. サイドライン（ダブルス用：一番外側）
+        createLineMesh(lw, this.courtLength, -halfW, 0);
+        createLineMesh(lw, this.courtLength, halfW, 0);
+
+        // 3. サイドライン（シングルス用：ダブルスの内側、実際の比率 0.46m / 6.1m ≒ 幅の約7.5%内側）
+        const singleLineOffset = halfW * 0.15;
+        createLineMesh(lw, this.courtLength, -halfW + singleLineOffset, 0);
+        createLineMesh(lw, this.courtLength, halfW - singleLineOffset, 0);
+
+        // 4. ショートサービスライン（ネットから実際の比率 1.98m / 13.4m ≒ 長さの約14.8%）
+        const shortServiceZ = halfL * 0.295;
+        createLineMesh(this.courtWidth, lw, 0, -shortServiceZ);
+        createLineMesh(this.courtWidth, lw, 0, shortServiceZ);
+
+        // 5. ロングサービスライン（ダブルス用：バックラインの内側、実際の比率 0.76m / 13.4m ≒ 長さの約5.6%内側）
+        const doubleLongServiceOffset = halfL * 0.113;
+        createLineMesh(this.courtWidth, lw, 0, -halfL + doubleLongServiceOffset);
+        createLineMesh(this.courtWidth, lw, 0, halfL - doubleLongServiceOffset);
+
+        // 6. センターライン（ショートサービスラインからエンドラインまでを繋ぐ）
+        const centerLineLength = halfL - shortServiceZ;
+        const centerLineZNorth = -shortServiceZ - (centerLineLength / 2);
+        const centerLineZSouth = shortServiceZ + (centerLineLength / 2);
+        createLineMesh(lw, centerLineLength, 0, centerLineZNorth);
+        createLineMesh(lw, centerLineLength, 0, centerLineZSouth);
+
+        // 7. センターネット下のライン（センター位置確認用）
+        createLineMesh(this.courtWidth, lw, 0, 0);
+
+        // ネットポスト
         const postGeo = new THREE.CylinderGeometry(0.08, 0.08, this.netHeight);
-        const postMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8, roughness: 0.2 });
         const postL = new THREE.Mesh(postGeo, postMat);
-        postL.position.set(-this.courtWidth/2 - 0.1, this.netHeight/2, 0);
+        postL.position.set(-halfW - 0.1, this.netHeight/2, 0);
         const postR = postL.clone(); 
-        postR.position.x = this.courtWidth/2 + 0.1;
+        postR.position.x = halfW + 0.1;
         this.scene.add(postL); 
         this.scene.add(postR);
 
+        // ネット
         const netHeight = 0.75;
         const netGeo = new THREE.PlaneGeometry(this.courtWidth, netHeight, 40, 5);
-        const netMat = new THREE.MeshPhongMaterial({ color: 0x331100, wireframe: true, transparent: true, opacity: 0.7 });
+        const netMat = new THREE.MeshPhongMaterial({ color: 0x4e2715, wireframe: true, transparent: true, opacity: 0.75 });
         const net = new THREE.Mesh(netGeo, netMat);
         net.position.set(0, this.netHeight - netHeight / 2, 0);
         this.scene.add(net);
 
+        // ネット上部の白テープ
         const tapeGeo = new THREE.PlaneGeometry(this.courtWidth, 0.08);
         const tapeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const tape = new THREE.Mesh(tapeGeo, tapeMat);
         tape.position.set(0, this.netHeight - 0.04, 0.005);
         this.scene.add(tape);
+
+        // --- 衝突用クッションパネル（角の重なりを精密に解消し、すべて黄色で統一） ---
+        const panelHeight = 0.8;
+        const panelThickness = 0.2;
+        const cushionColor = 0xc5b13c; // 黄色で統一
+
+        const boundaryX = halfW + 3.0; // 9.0 (左右フェンスの位置)
+        const boundaryZ = halfL + 4.0; // 14.0 (前後フェンスの位置)
+
+        // 縦（左右）壁用の設定：Zの範囲は -14.0 から 14.0 (全長28) とし、幅 3.5 のパネルを 8 枚並べる
+        const panelWidthZ = 3.5;
+        const panelGeoZ = new THREE.BoxGeometry(panelWidthZ, panelHeight, panelThickness);
+
+        // 横（奥・手前）壁用の設定：内側の幅 17.8 に収まるよう、幅 4.45 のパネルを 4 枚並べる
+        const panelWidthX = 4.45;
+        const panelGeoX = new THREE.BoxGeometry(panelWidthX, panelHeight, panelThickness);
+
+        const createCushionPanel = (x, z, rotationY, isXPanel) => {
+            const panelGeo = isXPanel ? panelGeoX : panelGeoZ;
+            const currentWidth = isXPanel ? panelWidthX : panelWidthZ;
+
+            const panelMat = new THREE.MeshStandardMaterial({ color: cushionColor, roughness: 0.5 });
+            const panelMesh = new THREE.Mesh(panelGeo, panelMat);
+            panelMesh.position.set(x, panelHeight / 2, z);
+            panelMesh.rotation.y = rotationY;
+            this.scene.add(panelMesh);
+
+            // 看板のテキストエリア風ホワイトフレーム
+            const faceGeo = new THREE.PlaneGeometry(currentWidth - 0.1, panelHeight - 0.1);
+            const faceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.15 });
+            const faceMesh = new THREE.Mesh(faceGeo, faceMat);
+            faceMesh.position.set(0, 0, panelThickness / 2 + 0.01);
+            panelMesh.add(faceMesh);
+        };
+
+        // 左右のフェンスを配置 (z = -12.25 から 12.25 まで 3.5 刻み、計8枚で全長28.0を隙間なくカバー)
+        for (let z = -boundaryZ + (panelWidthZ / 2); z <= boundaryZ - (panelWidthZ / 2); z += panelWidthZ) {
+            createCushionPanel(-boundaryX, z, Math.PI / 2, false);
+            createCushionPanel(boundaryX, z, -Math.PI / 2, false);
+        }
+
+        // 奥と手前のフェンスを配置 (x = -6.675 から 6.675 まで 4.45 刻み、計4枚で隙間なくカバー)
+        const startX = -boundaryX + panelThickness / 2 + (panelWidthX / 2); // -9.0 + 0.1 + 2.225 = -6.675
+        const endX = boundaryX - panelThickness / 2 - (panelWidthX / 2);   // 9.0 - 0.1 - 2.225 = 6.675
+        for (let x = startX; x <= endX + 0.01; x += panelWidthX) {
+            createCushionPanel(x, -boundaryZ, 0, true);
+            createCushionPanel(x, boundaryZ, Math.PI, true);
+        }
+
+        // --- 観客席の構築（スタンド位置を奥に下げてクッションが埋もれないように調整） ---
+        const standRows = 4;
+        const standStepHeight = 0.6;
+        const standStepDepth = 1.2;
+        const standWidth = 45;
+
+        const buildStands = (posX, posZ, rotY) => {
+            const standGroup = new THREE.Group();
+            for (let i = 0; i < standRows; i++) {
+                const stepW = standWidth;
+                const stepH = standStepHeight * (i + 1);
+                const stepD = standStepDepth;
+
+                const stepGeo = new THREE.BoxGeometry(stepW, stepH, stepD);
+                const stepMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c, roughness: 0.8 });
+                const stepMesh = new THREE.Mesh(stepGeo, stepMat);
+
+                // 階段状にずらして配置
+                stepMesh.position.set(0, stepH / 2, i * stepD);
+                standGroup.add(stepMesh);
+
+                // 観客のポリゴンモデルをランダム配置
+                const spectatorCount = 18;
+                const spectatorColors = [0xdd3333, 0x3333dd, 0x33dd33, 0xdddd33, 0xdd33dd, 0x33dddd, 0xeeeeee];
+                for (let j = 0; j < spectatorCount; j++) {
+                    const specX = (Math.random() - 0.5) * (stepW - 2);
+                    const specY = stepH + 0.3; // 階段の上面
+                    const specZ = (i * stepD) + (Math.random() - 0.5) * 0.4;
+
+                    const bodyGeo = new THREE.BoxGeometry(0.35, 0.5, 0.35);
+                    const headGeo = new THREE.SphereGeometry(0.18, 8, 8);
+
+                    const specColor = spectatorColors[Math.floor(Math.random() * spectatorColors.length)];
+                    const specMat = new THREE.MeshStandardMaterial({ color: specColor, roughness: 0.7 });
+                    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 }); // 肌色
+
+                    const specBody = new THREE.Mesh(bodyGeo, specMat);
+                    specBody.position.set(specX, specY, specZ);
+
+                    const specHead = new THREE.Mesh(headGeo, headMat);
+                    specHead.position.set(0, 0.35, 0);
+                    specBody.add(specHead);
+
+                    standGroup.add(specBody);
+                }
+            }
+            standGroup.position.set(posX, 0, posZ);
+            standGroup.rotation.y = rotY;
+            this.scene.add(standGroup);
+        };
+
+        // 奥（北側）の観客席スタンドを Z = -19.0 から Z = -21.0 へ後退させて隙間を確保
+        buildStands(0, -halfL - 11.0, 0);
+        // 手前（南側）の観客席スタンドも Z = 19.0 から Z = 21.0 へ後退
+        buildStands(0, halfL + 11.0, Math.PI);
+
+        // --- 天井ライトアップ効果（ライト強度を半分以下に抑え、コーンの透明度も調整） ---
+        const lightFixtureGeo = new THREE.CylinderGeometry(0.4, 0.5, 0.6, 16);
+        const lightFixtureMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.2 });
+
+        const lightConeGeo = new THREE.CylinderGeometry(0.4, 4.5, 15, 32, 1, true);
+        const lightConeMat = new THREE.MeshBasicMaterial({
+            color: 0xfffbe0,
+            transparent: true,
+            opacity: 0.05,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+
+        const setupCeilingLight = (x, z) => {
+            const fixture = new THREE.Mesh(lightFixtureGeo, lightFixtureMat);
+            fixture.position.set(x, 15, z);
+            this.scene.add(fixture);
+
+            // 光のコーン（ライトビーム）
+            const cone = new THREE.Mesh(lightConeGeo, lightConeMat);
+            cone.position.set(x, 7.5, z);
+            this.scene.add(cone);
+
+            // 実際の光源（強度を 0.85 から 0.35 に変更して半分以下に）
+            const spotLight = new THREE.SpotLight(0xffffff, 0.35);
+            spotLight.position.set(x, 14.8, z);
+            spotLight.target.position.set(x, 0, z);
+            spotLight.angle = Math.PI / 4;
+            spotLight.penumbra = 0.8;
+            spotLight.distance = 25;
+            this.scene.add(spotLight);
+            this.scene.add(spotLight.target);
+        };
+
+        // コートの四隅および中央付近の天井にライトを設置
+        setupCeilingLight(-halfW + 1, -halfL + 2);
+        setupCeilingLight(halfW - 1, -halfL + 2);
+        setupCeilingLight(-halfW + 1, halfL - 2);
+        setupCeilingLight(halfW - 1, halfL - 2);
     },
 
     buildCharacters() {
@@ -148,17 +326,17 @@ const GameCore = {
         body.position.y = 0.5;
         this.playerGroup.add(body);
 
-        // プレイヤーの影
+        // プレイヤーの影（コート表面の上に重なるようにy座標を調整）
         const shadowGeo = new THREE.RingGeometry(0, 0.45, 32);
         const shadowMat = new THREE.MeshBasicMaterial({ 
             color: 0x000000, 
             transparent: true, 
-            opacity: 0.35, 
+            opacity: 0.4, 
             side: THREE.DoubleSide 
         });
         const playerShadow = new THREE.Mesh(shadowGeo, shadowMat);
         playerShadow.rotation.x = -Math.PI / 2;
-        playerShadow.position.y = 0.005;
+        playerShadow.position.y = 0.025; // コート(0.01)や白線(0.015)の上に重なるように修正
         this.playerGroup.add(playerShadow);
 
         const rangeGeo = new THREE.RingGeometry(this.hitRadius - 0.08, this.hitRadius, 64);
@@ -173,7 +351,7 @@ const GameCore = {
         });
         const rangeMesh = new THREE.Mesh(rangeGeo, rangeMat);
         rangeMesh.rotation.x = -Math.PI / 2; 
-        rangeMesh.position.y = 0.008;
+        rangeMesh.position.y = 0.028; // コート上に綺麗に描画されるよう調整
         this.playerGroup.add(rangeMesh);
         
         this.playerGroup.position.set(0, 0, 6);
@@ -214,7 +392,8 @@ const GameCore = {
         this.scene.add(this.shuttleGroup);
 
         this.shuttleShadow = new THREE.Mesh(new THREE.RingGeometry(0, 0.18, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
-        this.shuttleShadow.rotation.x = -Math.PI / 2; this.shuttleShadow.position.y = 0.02;
+        this.shuttleShadow.rotation.x = -Math.PI / 2; 
+        this.shuttleShadow.position.y = 0.025; // 影がコート床に隠れないように調整
         this.scene.add(this.shuttleShadow);
     },
 
