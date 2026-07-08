@@ -357,14 +357,86 @@ const GameCore = {
         this.playerGroup.position.set(0, 0, 6);
         this.scene.add(this.playerGroup);
 
-        const pRacket = new THREE.Group();
-        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
-        shaft.position.y = 0.45; pRacket.add(shaft);
-        const frame = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.015, 8, 24), new THREE.MeshStandardMaterial({ color: 0xffdd00 }));
-        frame.position.y = 1.08; frame.scale.set(0.7, 1.0, 1.0); pRacket.add(frame);
-        pRacket.position.set(0.6, 0.4, 0.2); pRacket.rotation.set(0.2, 0, -0.3); pRacket.name = "racket";
+        // 精巧なバドミントンラケット作成ヘルパー
+        const createRealisticRacket = (frameColor) => {
+            const racket = new THREE.Group();
+
+            // 1. 八角形のグリップ (Grip Tape)
+            const gripGeo = new THREE.CylinderGeometry(0.038, 0.042, 0.28, 8);
+            const gripMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.95 }); // 巻きグリップ
+            const grip = new THREE.Mesh(gripGeo, gripMat);
+            grip.position.y = 0.14;
+            racket.add(grip);
+
+            // グリップエンド (Grip Cap)
+            const capGeo = new THREE.CylinderGeometry(0.044, 0.044, 0.04, 8);
+            const capMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.position.y = 0.02;
+            racket.add(cap);
+
+            // 2. スリムな極細シャフト (Carbon Shaft)
+            const shaftGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.65, 8);
+            const shaftMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.85, roughness: 0.15 });
+            const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+            shaft.position.y = 0.28 + 0.325; // グリップの上から伸ばす
+            racket.add(shaft);
+
+            // 3. T字型接続ジョイント (T-Joint)
+            const jointGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.06, 8);
+            const jointMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.9, roughness: 0.2 });
+            const joint = new THREE.Mesh(jointGeo, jointMat);
+            joint.position.y = 0.91;
+            racket.add(joint);
+
+            // 4. 楕円形フレーム (Head Frame)
+            const frameGeo = new THREE.TorusGeometry(0.18, 0.014, 8, 32);
+            const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.8, roughness: 0.3 });
+            const frame = new THREE.Mesh(frameGeo, frameMat);
+            frame.position.y = 1.09;
+            frame.scale.set(0.72, 1.0, 1.0); // バドミントンラケット特有の縦長楕円
+            racket.add(frame);
+
+            // 5. ストリング網 (Strings / ガット)
+            const stringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            const stringThickness = 0.003;
+
+            // 縦ガット (楕円幅に合わせて長さを調整し3本設置)
+            const vertPositions = [-0.07, 0, 0.07];
+            vertPositions.forEach(xPos => {
+                const stringH = Math.sqrt(1 - Math.pow(xPos / (0.18 * 0.72), 2)) * 0.34;
+                if (stringH > 0) {
+                    const strGeo = new THREE.CylinderGeometry(stringThickness, stringThickness, stringH, 4);
+                    const str = new THREE.Mesh(strGeo, stringMat);
+                    str.position.set(xPos, 1.09, 0);
+                    racket.add(str);
+                }
+            });
+
+            // 横ガット (5本設置)
+            const horizPositions = [-0.12, -0.06, 0, 0.06, 0.12];
+            horizPositions.forEach(yOffset => {
+                const stringW = Math.sqrt(1 - Math.pow(yOffset / 0.18, 2)) * 0.18 * 2 * 0.72;
+                if (stringW > 0) {
+                    const strGeo = new THREE.CylinderGeometry(stringThickness, stringThickness, stringW, 4);
+                    const str = new THREE.Mesh(strGeo, stringMat);
+                    str.rotation.z = Math.PI / 2;
+                    str.position.set(0, 1.09 + yOffset, 0);
+                    racket.add(str);
+                }
+            });
+
+            return racket;
+        };
+
+        // プレイヤー用：赤色基調の精巧ラケット
+        const pRacket = createRealisticRacket(0xff3b30);
+        pRacket.position.set(0.6, 0.4, 0.2); 
+        pRacket.rotation.set(0.2, 0, -0.3); 
+        pRacket.name = "racket";
         body.add(pRacket);
 
+        // NPCキャラクターの構築
         this.npcGroup = new THREE.Group();
         const npcBody = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0x007aff }));
         npcBody.name = "bodyMesh"; 
@@ -378,9 +450,11 @@ const GameCore = {
         this.npcGroup.position.set(0, 0, -6);
         this.scene.add(this.npcGroup);
 
-        const nRacket = pRacket.clone();
+        // NPC用：青色基調の精巧ラケット
+        const nRacket = createRealisticRacket(0x007aff);
         nRacket.position.set(-0.6, 0.4, 0.2); 
         nRacket.rotation.set(0.2, 0, 0.3);
+        nRacket.name = "racket";
         npcBody.add(nRacket);
     },
 
@@ -397,7 +471,7 @@ const GameCore = {
         this.scene.add(this.shuttleShadow);
     },
 
-    initInputs() {
+   initInputs() {
         window.addEventListener('keydown', (e) => {
             if (e.key === ' ' || e.code === 'Space') { keys.Space = true; this.startCharging(); }
             if (e.code === 'KeyW' || e.key === 'ArrowUp') keys.w = true; 
@@ -414,19 +488,56 @@ const GameCore = {
             if (e.code === 'KeyD' || e.key === 'ArrowRight') keys.d = false;
         });
 
+        // 十字キー（D-Pad）のマルチタッチ対応
         const dpadMapping = { 'dpad-up': 'w', 'dpad-down': 's', 'dpad-left': 'a', 'dpad-right': 'd' };
         Object.keys(dpadMapping).forEach(id => {
             const btn = document.getElementById(id);
             if (btn) {
-                btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[dpadMapping[id]] = true; }, { passive: false });
-                btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[dpadMapping[id]] = false; }, { passive: false });
+                btn.addEventListener('touchstart', (e) => { 
+                    e.preventDefault(); 
+                    keys[dpadMapping[id]] = true; 
+                }, { passive: false });
+                
+                const stopKey = (e) => {
+                    e.preventDefault();
+                    keys[dpadMapping[id]] = false;
+                };
+                // 指がボタンから離れた、または外にスライドした場合をカバー
+                btn.addEventListener('touchend', stopKey, { passive: false });
+                btn.addEventListener('touchcancel', stopKey, { passive: false });
             }
         });
         
+        // 打つボタン（Hit Button）のマルチタッチ対応（個別のタッチ追跡を実装）
         const hBtn = document.getElementById('hit-button');
         if (hBtn) {
-            hBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.startCharging(); }, { passive: false });
-            window.addEventListener('touchend', () => { if (isCharging) this.stopCharging(); });
+            let activeHitTouchId = null; // 打つボタンを制御している指のユニークなID
+            
+            hBtn.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                if (activeHitTouchId !== null) return; // すでにこのボタンが押し込まれている場合は重複防止
+                
+                const touch = e.changedTouches[0];
+                activeHitTouchId = touch.identifier; // タッチIDを記憶して追跡開始
+                this.startCharging(); 
+            }, { passive: false });
+            
+            const endHitCharge = (e) => {
+                if (activeHitTouchId === null) return;
+                
+                // 今回離された指(changedTouches)の中に、追跡対象のIDが含まれているかチェック
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === activeHitTouchId) {
+                        e.preventDefault();
+                        activeHitTouchId = null; // 追跡終了
+                        this.stopCharging();
+                        break;
+                    }
+                }
+            };
+            
+            hBtn.addEventListener('touchend', endHitCharge, { passive: false });
+            hBtn.addEventListener('touchcancel', endHitCharge, { passive: false });
         }
     },
 
