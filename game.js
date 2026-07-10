@@ -8,8 +8,9 @@ const POWER_CHARGE_SPEED = 2.5;
 let playerScore = 0;
 let npcScore = 0;
 let gameState = 'waiting';
+let courtType = 'gym'; // 初期コートタイプ
 let npcLevel = 1;
-let matchPoint = 21; // MATCH_POINTを動的な設定項目に変更
+let matchPoint = 21; 
 
 const GameCore = {
     courtWidth: 12, courtLength: 20, netHeight: 2.2, hitRadius: 2.0,
@@ -26,8 +27,6 @@ const GameCore = {
     init() {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x3a7d44);
-        this.scene.fog = new THREE.FogExp2(0x3a7d44, 0.015);
         
         this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 8, 16);
@@ -39,14 +38,15 @@ const GameCore = {
         this.renderer.shadowMap.enabled = false;
         document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
-        this.scene.add(ambientLight);
-        
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
-        dirLight.position.set(10, 25, 10);
-        this.scene.add(dirLight);
+        // 背景色は EnvironmentManager に一任するため削除し、初期コート構築を呼び出す
+        if (typeof EnvironmentManager !== 'undefined') {
+            EnvironmentManager.buildCourt(this.scene, courtType, {
+                courtWidth: this.courtWidth,
+                courtLength: this.courtLength,
+                netHeight: this.netHeight
+            });
+        }
 
-        this.buildField();
         this.buildCharacters();
         this.buildShuttle();
 
@@ -74,15 +74,26 @@ const GameCore = {
         const finalStartBtn = document.getElementById('final-start-btn');
         if (finalStartBtn) {
             finalStartBtn.addEventListener('click', () => {
-                // アクティブなレベルボタンからNPCレベルを取得
+                const activeCourtBtn = document.querySelector('.court-opt.active');
+                if (activeCourtBtn) {
+                    courtType = activeCourtBtn.dataset.court;
+                }
                 const activeLevelBtn = document.querySelector('.level-opt.active');
                 if (activeLevelBtn) {
                     npcLevel = parseInt(activeLevelBtn.dataset.level);
                 }
-                // アクティブなマッチポイントボタンからポイント数を取得
                 const activePointBtn = document.querySelector('.point-opt.active');
                 if (activePointBtn) {
                     matchPoint = parseInt(activePointBtn.dataset.point);
+                }
+
+                // 選択されたコート環境を再構築
+                if (typeof EnvironmentManager !== 'undefined') {
+                    EnvironmentManager.buildCourt(this.scene, courtType, {
+                        courtWidth: this.courtWidth,
+                        courtLength: this.courtLength,
+                        netHeight: this.netHeight
+                    });
                 }
 
                 if (typeof UIManager !== 'undefined') UIManager.showStartScreen(false);
@@ -96,239 +107,6 @@ const GameCore = {
         this.animate();
     },
 
-    buildField() {
-        // グラウンド（体育館の床）
-        const groundGeo = new THREE.PlaneGeometry(120, 120);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x1d3a24, roughness: 0.9 });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        this.scene.add(ground);
-
-        // バドミントンコート床面
-        const courtGeo = new THREE.PlaneGeometry(this.courtWidth, this.courtLength);
-        const courtMat = new THREE.MeshStandardMaterial({ color: 0x1b5e3a, roughness: 0.6, metalness: 0.1 });
-        const court = new THREE.Mesh(courtGeo, courtMat);
-        court.rotation.x = -Math.PI / 2;
-        court.position.y = 0.01;
-        this.scene.add(court);
-
-        // 白線描画ユーティリティ
-        const createLineMesh = (w, h, x, z) => {
-            const geo = new THREE.PlaneGeometry(w, h);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-            const m = new THREE.Mesh(geo, mat);
-            m.rotation.x = -Math.PI / 2; 
-            m.position.set(x, 0.015, z);
-            this.scene.add(m);
-        };
-
-        const lw = 0.08; // 実際の白線の太さ比率に合わせた調整
-        const halfW = this.courtWidth / 2;
-        const halfL = this.courtLength / 2;
-
-        // 1. バックバウンダリーライン（エンドライン）
-        createLineMesh(this.courtWidth, lw, 0, -halfL);
-        createLineMesh(this.courtWidth, lw, 0, halfL);
-
-        // 2. サイドライン（ダブルス用：一番外側）
-        createLineMesh(lw, this.courtLength, -halfW, 0);
-        createLineMesh(lw, this.courtLength, halfW, 0);
-
-        // 3. サイドライン（シングルス用：ダブルスの内側、実際の比率 0.46m / 6.1m ≒ 幅の約7.5%内側）
-        const singleLineOffset = halfW * 0.15;
-        createLineMesh(lw, this.courtLength, -halfW + singleLineOffset, 0);
-        createLineMesh(lw, this.courtLength, halfW - singleLineOffset, 0);
-
-        // 4. ショートサービスライン（ネットから実際の比率 1.98m / 13.4m ≒ 長さの約14.8%）
-        const shortServiceZ = halfL * 0.295;
-        createLineMesh(this.courtWidth, lw, 0, -shortServiceZ);
-        createLineMesh(this.courtWidth, lw, 0, shortServiceZ);
-
-        // 5. ロングサービスライン（ダブルス用：バックラインの内側、実際の比率 0.76m / 13.4m ≒ 長さの約5.6%内側）
-        const doubleLongServiceOffset = halfL * 0.113;
-        createLineMesh(this.courtWidth, lw, 0, -halfL + doubleLongServiceOffset);
-        createLineMesh(this.courtWidth, lw, 0, halfL - doubleLongServiceOffset);
-
-        // 6. センターライン（ショートサービスラインからエンドラインまでを繋ぐ）
-        const centerLineLength = halfL - shortServiceZ;
-        const centerLineZNorth = -shortServiceZ - (centerLineLength / 2);
-        const centerLineZSouth = shortServiceZ + (centerLineLength / 2);
-        createLineMesh(lw, centerLineLength, 0, centerLineZNorth);
-        createLineMesh(lw, centerLineLength, 0, centerLineZSouth);
-
-        // 7. センターネット下のライン（センター位置確認用）
-        createLineMesh(this.courtWidth, lw, 0, 0);
-
-        // ネットポスト
-        const postGeo = new THREE.CylinderGeometry(0.08, 0.08, this.netHeight);
-        const postMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8, roughness: 0.2 });
-        const postL = new THREE.Mesh(postGeo, postMat);
-        postL.position.set(-halfW - 0.1, this.netHeight/2, 0);
-        const postR = postL.clone(); 
-        postR.position.x = halfW + 0.1;
-        this.scene.add(postL); 
-        this.scene.add(postR);
-
-        // ネット
-        const netHeight = 0.75;
-        const netGeo = new THREE.PlaneGeometry(this.courtWidth, netHeight, 40, 5);
-        const netMat = new THREE.MeshPhongMaterial({ color: 0x4e2715, wireframe: true, transparent: true, opacity: 0.75 });
-        const net = new THREE.Mesh(netGeo, netMat);
-        net.position.set(0, this.netHeight - netHeight / 2, 0);
-        this.scene.add(net);
-
-        // ネット上部の白テープ
-        const tapeGeo = new THREE.PlaneGeometry(this.courtWidth, 0.08);
-        const tapeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-        const tape = new THREE.Mesh(tapeGeo, tapeMat);
-        tape.position.set(0, this.netHeight - 0.04, 0.005);
-        this.scene.add(tape);
-
-        // --- 衝突用クッションパネル（角の重なりを精密に解消し、すべて黄色で統一） ---
-        const panelHeight = 0.8;
-        const panelThickness = 0.2;
-        const cushionColor = 0xc5b13c; // 黄色で統一
-
-        const boundaryX = halfW + 3.0; // 9.0 (左右フェンスの位置)
-        const boundaryZ = halfL + 4.0; // 14.0 (前後フェンスの位置)
-
-        // 縦（左右）壁用の設定：Zの範囲は -14.0 から 14.0 (全長28) とし、幅 3.5 のパネルを 8 枚並べる
-        const panelWidthZ = 3.5;
-        const panelGeoZ = new THREE.BoxGeometry(panelWidthZ, panelHeight, panelThickness);
-
-        // 横（奥・手前）壁用の設定：内側の幅 17.8 に収まるよう、幅 4.45 のパネルを 4 枚並べる
-        const panelWidthX = 4.45;
-        const panelGeoX = new THREE.BoxGeometry(panelWidthX, panelHeight, panelThickness);
-
-        const createCushionPanel = (x, z, rotationY, isXPanel) => {
-            const panelGeo = isXPanel ? panelGeoX : panelGeoZ;
-            const currentWidth = isXPanel ? panelWidthX : panelWidthZ;
-
-            const panelMat = new THREE.MeshStandardMaterial({ color: cushionColor, roughness: 0.5 });
-            const panelMesh = new THREE.Mesh(panelGeo, panelMat);
-            panelMesh.position.set(x, panelHeight / 2, z);
-            panelMesh.rotation.y = rotationY;
-            this.scene.add(panelMesh);
-
-            // 看板のテキストエリア風ホワイトフレーム
-            const faceGeo = new THREE.PlaneGeometry(currentWidth - 0.1, panelHeight - 0.1);
-            const faceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.15 });
-            const faceMesh = new THREE.Mesh(faceGeo, faceMat);
-            faceMesh.position.set(0, 0, panelThickness / 2 + 0.01);
-            panelMesh.add(faceMesh);
-        };
-
-        // 左右のフェンスを配置 (z = -12.25 から 12.25 まで 3.5 刻み、計8枚で全長28.0を隙間なくカバー)
-        for (let z = -boundaryZ + (panelWidthZ / 2); z <= boundaryZ - (panelWidthZ / 2); z += panelWidthZ) {
-            createCushionPanel(-boundaryX, z, Math.PI / 2, false);
-            createCushionPanel(boundaryX, z, -Math.PI / 2, false);
-        }
-
-        // 奥と手前のフェンスを配置 (x = -6.675 から 6.675 まで 4.45 刻み、計4枚で隙間なくカバー)
-        const startX = -boundaryX + panelThickness / 2 + (panelWidthX / 2); // -9.0 + 0.1 + 2.225 = -6.675
-        const endX = boundaryX - panelThickness / 2 - (panelWidthX / 2);   // 9.0 - 0.1 - 2.225 = 6.675
-        for (let x = startX; x <= endX + 0.01; x += panelWidthX) {
-            createCushionPanel(x, -boundaryZ, 0, true);
-            createCushionPanel(x, boundaryZ, Math.PI, true);
-        }
-
-        // --- 観客席の構築（スタンド位置を奥に下げてクッションが埋もれないように調整） ---
-        const standRows = 4;
-        const standStepHeight = 0.6;
-        const standStepDepth = 1.2;
-        const standWidth = 45;
-
-        const buildStands = (posX, posZ, rotY) => {
-            const standGroup = new THREE.Group();
-            for (let i = 0; i < standRows; i++) {
-                const stepW = standWidth;
-                const stepH = standStepHeight * (i + 1);
-                const stepD = standStepDepth;
-
-                const stepGeo = new THREE.BoxGeometry(stepW, stepH, stepD);
-                const stepMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c, roughness: 0.8 });
-                const stepMesh = new THREE.Mesh(stepGeo, stepMat);
-
-                // 階段状にずらして配置
-                stepMesh.position.set(0, stepH / 2, i * stepD);
-                standGroup.add(stepMesh);
-
-                // 観客のポリゴンモデルをランダム配置
-                const spectatorCount = 18;
-                const spectatorColors = [0xdd3333, 0x3333dd, 0x33dd33, 0xdddd33, 0xdd33dd, 0x33dddd, 0xeeeeee];
-                for (let j = 0; j < spectatorCount; j++) {
-                    const specX = (Math.random() - 0.5) * (stepW - 2);
-                    const specY = stepH + 0.3; // 階段の上面
-                    const specZ = (i * stepD) + (Math.random() - 0.5) * 0.4;
-
-                    const bodyGeo = new THREE.BoxGeometry(0.35, 0.5, 0.35);
-                    const headGeo = new THREE.SphereGeometry(0.18, 8, 8);
-
-                    const specColor = spectatorColors[Math.floor(Math.random() * spectatorColors.length)];
-                    const specMat = new THREE.MeshStandardMaterial({ color: specColor, roughness: 0.7 });
-                    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 }); // 肌色
-
-                    const specBody = new THREE.Mesh(bodyGeo, specMat);
-                    specBody.position.set(specX, specY, specZ);
-
-                    const specHead = new THREE.Mesh(headGeo, headMat);
-                    specHead.position.set(0, 0.35, 0);
-                    specBody.add(specHead);
-
-                    standGroup.add(specBody);
-                }
-            }
-            standGroup.position.set(posX, 0, posZ);
-            standGroup.rotation.y = rotY;
-            this.scene.add(standGroup);
-        };
-
-        // 奥（北側）の観客席スタンドを Z = -19.0 から Z = -21.0 へ後退させて隙間を確保
-        buildStands(0, -halfL - 11.0, 0);
-        // 手前（南側）の観客席スタンドも Z = 19.0 から Z = 21.0 へ後退
-        buildStands(0, halfL + 11.0, Math.PI);
-
-        // --- 天井ライトアップ効果（ライト強度を半分以下に抑え、コーンの透明度も調整） ---
-        const lightFixtureGeo = new THREE.CylinderGeometry(0.4, 0.5, 0.6, 16);
-        const lightFixtureMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.2 });
-
-        const lightConeGeo = new THREE.CylinderGeometry(0.4, 4.5, 15, 32, 1, true);
-        const lightConeMat = new THREE.MeshBasicMaterial({
-            color: 0xfffbe0,
-            transparent: true,
-            opacity: 0.05,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-
-        const setupCeilingLight = (x, z) => {
-            const fixture = new THREE.Mesh(lightFixtureGeo, lightFixtureMat);
-            fixture.position.set(x, 15, z);
-            this.scene.add(fixture);
-
-            // 光のコーン（ライトビーム）
-            const cone = new THREE.Mesh(lightConeGeo, lightConeMat);
-            cone.position.set(x, 7.5, z);
-            this.scene.add(cone);
-
-            // 実際の光源（強度を 0.85 から 0.35 に変更して半分以下に）
-            const spotLight = new THREE.SpotLight(0xffffff, 0.35);
-            spotLight.position.set(x, 14.8, z);
-            spotLight.target.position.set(x, 0, z);
-            spotLight.angle = Math.PI / 4;
-            spotLight.penumbra = 0.8;
-            spotLight.distance = 25;
-            this.scene.add(spotLight);
-            this.scene.add(spotLight.target);
-        };
-
-        // コートの四隅および中央付近の天井にライトを設置
-        setupCeilingLight(-halfW + 1, -halfL + 2);
-        setupCeilingLight(halfW - 1, -halfL + 2);
-        setupCeilingLight(-halfW + 1, halfL - 2);
-        setupCeilingLight(halfW - 1, halfL - 2);
-    },
-
     buildCharacters() {
         this.playerGroup = new THREE.Group();
         const bodyGeo = new THREE.SphereGeometry(0.5, 32, 32);
@@ -338,7 +116,6 @@ const GameCore = {
         body.position.y = 0.5;
         this.playerGroup.add(body);
 
-        // プレイヤーの影（コート表面の上に重なるようにy座標を調整）
         const shadowGeo = new THREE.RingGeometry(0, 0.45, 32);
         const shadowMat = new THREE.MeshBasicMaterial({ 
             color: 0x000000, 
@@ -348,7 +125,7 @@ const GameCore = {
         });
         const playerShadow = new THREE.Mesh(shadowGeo, shadowMat);
         playerShadow.rotation.x = -Math.PI / 2;
-        playerShadow.position.y = 0.025; // コート(0.01)や白線(0.015)の上に重なるように修正
+        playerShadow.position.y = 0.025;
         this.playerGroup.add(playerShadow);
 
         const rangeGeo = new THREE.RingGeometry(this.hitRadius - 0.08, this.hitRadius, 64);
@@ -363,57 +140,49 @@ const GameCore = {
         });
         const rangeMesh = new THREE.Mesh(rangeGeo, rangeMat);
         rangeMesh.rotation.x = -Math.PI / 2; 
-        rangeMesh.position.y = 0.028; // コート上に綺麗に描画されるよう調整
+        rangeMesh.position.y = 0.028;
         this.playerGroup.add(rangeMesh);
         
         this.playerGroup.position.set(0, 0, 6);
         this.scene.add(this.playerGroup);
 
-        // 精巧なバドミントンラケット作成ヘルパー
         const createRealisticRacket = (frameColor) => {
             const racket = new THREE.Group();
 
-            // 1. 八角形のグリップ (Grip Tape)
             const gripGeo = new THREE.CylinderGeometry(0.038, 0.042, 0.28, 8);
-            const gripMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.95 }); // 巻きグリップ
+            const gripMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.95 });
             const grip = new THREE.Mesh(gripGeo, gripMat);
             grip.position.y = 0.14;
             racket.add(grip);
 
-            // グリップエンド (Grip Cap)
             const capGeo = new THREE.CylinderGeometry(0.044, 0.044, 0.04, 8);
             const capMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
             const cap = new THREE.Mesh(capGeo, capMat);
             cap.position.y = 0.02;
             racket.add(cap);
 
-            // 2. スリムな極細シャフト (Carbon Shaft)
             const shaftGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.65, 8);
             const shaftMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.85, roughness: 0.15 });
             const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-            shaft.position.y = 0.28 + 0.325; // グリップの上から伸ばす
+            shaft.position.y = 0.28 + 0.325;
             racket.add(shaft);
 
-            // 3. T字型接続ジョイント (T-Joint)
             const jointGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.06, 8);
             const jointMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.9, roughness: 0.2 });
             const joint = new THREE.Mesh(jointGeo, jointMat);
             joint.position.y = 0.91;
             racket.add(joint);
 
-            // 4. 楕円形フレーム (Head Frame)
             const frameGeo = new THREE.TorusGeometry(0.18, 0.014, 8, 32);
             const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, metalness: 0.8, roughness: 0.3 });
             const frame = new THREE.Mesh(frameGeo, frameMat);
             frame.position.y = 1.09;
-            frame.scale.set(0.72, 1.0, 1.0); // バドミントンラケット特有の縦長楕円
+            frame.scale.set(0.72, 1.0, 1.0);
             racket.add(frame);
 
-            // 5. ストリング網 (Strings / ガット)
             const stringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
             const stringThickness = 0.003;
 
-            // 縦ガット (楕円幅に合わせて長さを調整し3本設置)
             const vertPositions = [-0.07, 0, 0.07];
             vertPositions.forEach(xPos => {
                 const stringH = Math.sqrt(1 - Math.pow(xPos / (0.18 * 0.72), 2)) * 0.34;
@@ -425,7 +194,6 @@ const GameCore = {
                 }
             });
 
-            // 横ガット (5本設置)
             const horizPositions = [-0.12, -0.06, 0, 0.06, 0.12];
             horizPositions.forEach(yOffset => {
                 const stringW = Math.sqrt(1 - Math.pow(yOffset / 0.18, 2)) * 0.18 * 2 * 0.72;
@@ -441,28 +209,24 @@ const GameCore = {
             return racket;
         };
 
-        // プレイヤー用：赤色基調の精巧ラケット
         const pRacket = createRealisticRacket(0xff3b30);
         pRacket.position.set(0.6, 0.4, 0.2); 
         pRacket.rotation.set(0.2, 0, -0.3); 
         pRacket.name = "racket";
         body.add(pRacket);
 
-        // NPCキャラクターの構築
         this.npcGroup = new THREE.Group();
         const npcBody = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0x007aff }));
         npcBody.name = "bodyMesh"; 
         npcBody.position.y = 0.5; 
         this.npcGroup.add(npcBody);
         
-        // NPCの影
         const npcShadow = playerShadow.clone();
         this.npcGroup.add(npcShadow);
 
         this.npcGroup.position.set(0, 0, -6);
         this.scene.add(this.npcGroup);
 
-        // NPC用：青色基調の精巧ラケット
         const nRacket = createRealisticRacket(0x007aff);
         nRacket.position.set(-0.6, 0.4, 0.2); 
         nRacket.rotation.set(0.2, 0, 0.3);
@@ -479,7 +243,7 @@ const GameCore = {
 
         this.shuttleShadow = new THREE.Mesh(new THREE.RingGeometry(0, 0.18, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
         this.shuttleShadow.rotation.x = -Math.PI / 2; 
-        this.shuttleShadow.position.y = 0.025; // 影がコート床に隠れないように調整
+        this.shuttleShadow.position.y = 0.025; 
         this.scene.add(this.shuttleShadow);
     },
 
@@ -500,7 +264,6 @@ const GameCore = {
             if (e.code === 'KeyD' || e.key === 'ArrowRight') keys.d = false;
         });
 
-        // 十字キー（D-Pad）のマルチタッチ対応
         const dpadMapping = { 'dpad-up': 'w', 'dpad-down': 's', 'dpad-left': 'a', 'dpad-right': 'd' };
         Object.keys(dpadMapping).forEach(id => {
             const btn = document.getElementById(id);
@@ -514,34 +277,31 @@ const GameCore = {
                     e.preventDefault();
                     keys[dpadMapping[id]] = false;
                 };
-                // 指がボタンから離れた、または外にスライドした場合をカバー
                 btn.addEventListener('touchend', stopKey, { passive: false });
                 btn.addEventListener('touchcancel', stopKey, { passive: false });
             }
         });
         
-        // 打つボタン（Hit Button）のマルチタッチ対応（個別のタッチ追跡を実装）
         const hBtn = document.getElementById('hit-button');
         if (hBtn) {
-            let activeHitTouchId = null; // 打つボタンを制御している指のユニークなID
+            let activeHitTouchId = null; 
             
             hBtn.addEventListener('touchstart', (e) => { 
                 e.preventDefault(); 
-                if (activeHitTouchId !== null) return; // すでにこのボタンが押し込まれている場合は重複防止
+                if (activeHitTouchId !== null) return; 
                 
                 const touch = e.changedTouches[0];
-                activeHitTouchId = touch.identifier; // タッチIDを記憶して追跡開始
+                activeHitTouchId = touch.identifier; 
                 this.startCharging(); 
             }, { passive: false });
             
             const endHitCharge = (e) => {
                 if (activeHitTouchId === null) return;
                 
-                // 今回離された指(changedTouches)の中に、追跡対象のIDが含まれているかチェック
                 for (let i = 0; i < e.changedTouches.length; i++) {
                     if (e.changedTouches[i].identifier === activeHitTouchId) {
                         e.preventDefault();
-                        activeHitTouchId = null; // 追跡終了
+                        activeHitTouchId = null; 
                         this.stopCharging();
                         break;
                     }
@@ -573,7 +333,6 @@ const GameCore = {
     },
 
     hitShuttle(hitter, hitPower) {
-        // 下キー(s)が押されている場合は、スマッシュのパワーに達していてもドロップショットを優先
         const isDrop = (hitter === 'player' && keys.s);
         const isSmash = (!isDrop && hitPower >= 50);
         
@@ -581,28 +340,22 @@ const GameCore = {
         
         if (hitter === 'player') {
             this.playerSwingTime = 0;
-            // 左右の狙い位置分け
             let tx = (keys.a) ? -4.2 : (keys.d) ? 4.2 : (Math.random() - 0.5) * 1.5;
 
             if (isDrop) {
-                // ドロップ：相手側コートのネット際（z = -2.0 〜 -3.2 付近）をターゲットにふんわり落とす
                 let tz = -2.0 - Math.random() * 1.2;
-                // ピーク高さはネット高さの少し上の2.4m程度に設定してスレスレを狙う
                 BadmintonPhysics.calculateDrop(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 2.4, this.shuttlePhys);
             } else if (isSmash) {
-                // スマッシュ：相手側コート奥に鋭く叩きつける
                 let tz = -this.courtLength / 2 + 1.2 + Math.random() * 2.0;
                 const jumpHitPoint = new THREE.Vector3(this.playerGroup.position.x, 2.3 + (PlayerManager.jumpY * 0.5), this.playerGroup.position.z);
                 BadmintonPhysics.calculateSmash(jumpHitPoint, new THREE.Vector3(tx, 0.1, tz), hitPower, this.shuttlePhys);
             } else {
-                // 通常のクリア・ロブ
                 let tz = -this.courtLength / 2 + 1.2 + Math.random() * 2.0;
                 BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 5.5, this.shuttlePhys);
             }
             PlayerManager.npcHasHitRight = true; PlayerManager.isAirborneWaiting = false;
         } else {
             this.npcSwingTime = 0;
-            // レベル3およびMAX NPC：プレイヤーの位置の逆サイドをより高い精度で射抜く
             let tx = this.playerGroup.position.x > 0 ? -3.4 : 3.4;
             if (npcLevel === 3 || npcLevel === 4) {
                 tx = this.playerGroup.position.x > 1.2 ? -4.0 : (this.playerGroup.position.x < -1.2 ? 4.0 : (Math.random() > 0.5 ? 4.0 : -4.0));
@@ -611,7 +364,6 @@ const GameCore = {
             let tz = this.courtLength / 2 - 1.5 - Math.random() * 2.0;
             
             if (npcLevel === 4) {
-                // レベルMAX：高く打ち上げられたチャンスボール（Y >= 3.0, Z < -3.0）なら100%スマッシュを狙う
                 const isChanceBall = this.shuttlePhys.pos.y >= 3.0 && this.shuttlePhys.pos.z < -3.0;
 
                 if (PlayerManager.npcIsJumping && isChanceBall) {
@@ -620,7 +372,6 @@ const GameCore = {
                 } else if (isChanceBall) {
                     BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
                 } else {
-                    // チャンスボール以外は、30%の確率でドロップショット、70%の確率でクリア（ロブ）
                     if (Math.random() < 0.30) {
                         const dropTx = this.playerGroup.position.x > 0 ? -3.8 : 3.8;
                         const dropTz = 2.0 + Math.random() * 1.0;
@@ -630,15 +381,15 @@ const GameCore = {
                     }
                 }
             } else if (npcLevel === 3) {
-                // 新レベル3：チャンスボールであっても50%の確率でのみスマッシュを打つ
+                // 新レベル3：チャンスボールであっても50%の確率でのみスマッシュを打つ（レベル3は球速を落として調整）
                 const isChanceBall = this.shuttlePhys.pos.y >= 3.0 && this.shuttlePhys.pos.z < -3.0;
 
                 if (isChanceBall && Math.random() < 0.50) {
                     if (PlayerManager.npcIsJumping) {
                         const jumpHitPointNPC = new THREE.Vector3(this.npcGroup.position.x, 2.3 + (PlayerManager.npcJumpY * 0.5), this.npcGroup.position.z);
-                        BadmintonPhysics.calculateSmash(jumpHitPointNPC, new THREE.Vector3(tx, 0.1, tz), 100, this.shuttlePhys);
+                        BadmintonPhysics.calculateSmash(jumpHitPointNPC, new THREE.Vector3(tx, 0.1, tz), 70, this.shuttlePhys); // 100 -> 76に落として調整
                     } else {
-                        BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
+                        BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 68, this.shuttlePhys); // 85 -> 68に落として調整
                     }
                 } else {
                     // 通常打ち：ドロップショットは確率を下げて12%のみ、残りは安定したクリア（ロブ）
@@ -650,9 +401,11 @@ const GameCore = {
                         BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 5.2 + Math.random() * 1.5, this.shuttlePhys);
                     }
                 }
-            } else if (npcLevel === 2 && this.shuttlePhys.pos.y > 2.5 && this.shuttlePhys.pos.z < -2.0) {
-                BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
+            } else if (npcLevel === 2) {
+                // レベル2：スマッシュを打たず、クリア（ロブ）のみで安定して返す
+                BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 4.8 + Math.random() * 2.0, this.shuttlePhys);
             } else {
+                // レベル1など
                 BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 4.8 + Math.random() * 2.0, this.shuttlePhys);
             }
             PlayerManager.playerHasHitRight = true;
@@ -677,7 +430,6 @@ const GameCore = {
     scorePoint(winner) {
         gameState = 'ended';
         
-        // 得点確定時にランダム歓声を再生
         if (typeof BadmintonAudio !== 'undefined') {
             BadmintonAudio.playCheer();
         }
@@ -711,7 +463,6 @@ const GameCore = {
         PlayerManager.isJumping = false; PlayerManager.isAirborneWaiting = false;
         PlayerManager.jumpY = 0; PlayerManager.jumpVel = 0;
         
-        // NPCのジャンプ状態もリセット
         PlayerManager.npcIsJumping = false; PlayerManager.npcJumpY = 0; PlayerManager.npcJumpVel = 0;
         const npcBodyM = this.npcGroup.getObjectByName("bodyMesh");
         if (npcBodyM) npcBodyM.position.y = 0.5;
@@ -742,7 +493,6 @@ const GameCore = {
         if (dt > 0.1) dt = 0.1;
         if (gameState === 'waiting' || (typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
 
-        // サーブ待機時のシャトル手元追従
         if (gameState === 'serve-player') {
             this.shuttlePhys.pos.set(
                 this.playerGroup.position.x + 0.5,
@@ -769,18 +519,15 @@ const GameCore = {
             power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
             if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power);
             if (gameState === 'rally' && PlayerManager.playerHasHitRight && this.shuttlePhys.vel.z > 0 && this.shuttlePhys.pos.z > -1.5) {
-                // 水平距離（2D）で判定するよう修正
                 const flatPlayer = new THREE.Vector2(this.playerGroup.position.x, this.playerGroup.position.z);
                 const flatShuttle = new THREE.Vector2(this.shuttlePhys.pos.x, this.shuttlePhys.pos.z);
                 const dist2D = flatPlayer.distanceTo(flatShuttle);
                 
-                // 水平距離が近く、シャトルが高い位置にある場合にジャンプ
                 if (power >= 50 && !PlayerManager.isJumping && dist2D < (this.hitRadius + 1.2) && this.shuttlePhys.pos.y > 2.5) {
                     PlayerManager.isJumping = true; PlayerManager.isAirborneWaiting = true;
                     PlayerManager.jumpVel = (power >= 99) ? 17.5 : 14.5;
                 }
                 
-                // ジャンプ中または地上でのヒット判定
                 if (PlayerManager.checkShuttleInRange(this.playerGroup.position, PlayerManager.jumpY, this.shuttlePhys.pos, this.hitRadius)) {
                     this.hitShuttle('player', power);
                     PlayerManager.playerHasHitRight = false;
@@ -793,7 +540,6 @@ const GameCore = {
         PlayerManager.updateNPC(this.npcGroup, this.shuttlePhys, gameState, dt, npcLevel);
 
         if (gameState === 'rally') {
-            // NPCのヒット判定（レベル3およびレベルMAXのジャンプに対応）
             const isNpcInRange = PlayerManager.checkShuttleInRange(
                 this.npcGroup.position, 
                 PlayerManager.npcJumpY, 
@@ -802,7 +548,6 @@ const GameCore = {
             );
 
             if (PlayerManager.npcHasHitRight && isNpcInRange && this.shuttlePhys.vel.z < 0 && this.shuttlePhys.pos.z < 1.5) {
-                // レベル3 or レベルMAXでジャンプ中ならパワー100で処理
                 let power = 70;
                 if (npcLevel === 3 || npcLevel === 4) {
                     power = PlayerManager.npcIsJumping ? 100 : 80;

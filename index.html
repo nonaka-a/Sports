@@ -36,7 +36,16 @@
         </div>
 
         <!-- 設定パネル（初期非表示） -->
-        <div id="game-setup-zone" style="display: none; flex-direction: column; align-items: center; gap: 24px; background: rgba(0,0,0,0.6); padding: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15);">
+        <div id="game-setup-zone" style="display: none; flex-direction: column; align-items: center; gap: 20px; background: rgba(0,0,0,0.6); padding: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15);">
+            
+            <div class="setup-group">
+                <div class="setup-label">COURT</div>
+                <div class="court-select-container" style="display: flex; gap: 12px;">
+                    <button class="setup-opt-btn court-opt active" data-court="gym">NORMAL</button>
+                    <button class="setup-opt-btn court-opt" data-court="cute">CUTE</button>
+                </div>
+            </div>
+
             <div class="setup-group">
                 <div class="setup-label">NPC LEVEL</div>
                 <div class="level-select-container">
@@ -110,6 +119,7 @@
 
     <script src="audio.js"></script>
     <script src="physics.js"></script>
+    <script src="environment.js"></script>
     <script src="player.js"></script>
     <script src="ui.js"></script>
     <script src="game.js"></script>

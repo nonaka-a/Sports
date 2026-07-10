@@ -50,7 +50,6 @@ const UIManager = {
             fullscreenBtn.addEventListener('click', () => {
                 this.toggleFullscreen();
             });
-            // フルスクリーン状態が変わった時にボタンの見た目を調整するイベントリスナー
             const updateFSBtnText = () => {
                 const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
                 fullscreenBtn.innerText = isFS ? "窓表示" : "全画面";
@@ -75,6 +74,14 @@ const UIManager = {
         }
 
         // 設定の選択状態の更新トグル
+        const courtOpts = document.querySelectorAll('.court-opt');
+        courtOpts.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                courtOpts.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
         const levelOpts = document.querySelectorAll('.level-opt');
         levelOpts.forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -152,7 +159,7 @@ const UIManager = {
         
         if (resultScore) resultScore.innerText = `${playerScore} - ${npcScore}`;
         if (resultScreen) resultScreen.style.display = 'flex';
-        // リザルト表示中はUI（十字キーや設定ボタン）を隠す
+        // リザルト表示中はUIを隠す
         if (ui) ui.style.display = 'none'; 
     },
 

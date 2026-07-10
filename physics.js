@@ -25,11 +25,10 @@ const BadmintonPhysics = {
         const direction = new THREE.Vector3().subVectors(target, start);
         direction.normalize();
         
-        // 打点の高さ(start.y)に基づいて角度を決定
-        // ネットの高さは約2.2。打点が低い(2.3付近)ときは水平に近い
-        // 高い(3.0以上)ときは鋭角(0.35)に突き刺す
-        const heightFactor = Math.max(0, Math.min(1, (start.y - 2.2) / 1.2)); 
-        const downwardAngle = heightFactor * 0.35; 
+        // 打撃の高さに基づいて下向きの角度を決定
+        // ネット引っかかりを回避するため最低下向き角度を0.05まで下げ、高い位置(ジャンプ)から打った時のみ深く突き刺さる(最大0.43)ように再調整
+        const heightFactor = Math.max(0, Math.min(1, (start.y - 2.1) / 1.2)); 
+        const downwardAngle = 0.06 + heightFactor * 0.36; 
         
         direction.y = -downwardAngle; 
         direction.normalize();
@@ -52,7 +51,7 @@ const BadmintonPhysics = {
         const vy = g * t1;
         
         shuttlePhys.vel.set(vx, vy, vz);
-        // 初速倍率を1.06に抑え、ふんわりとしたやさしい山なりのドロップショットにします
-        shuttlePhys.vel.multiplyScalar(1.06);
+        // 初速倍率を1.06から0.92へ大きく引き下げ、シャトルの落下速度をさらに遅くマイルドにします
+        shuttlePhys.vel.multiplyScalar(0.92);
     }
 };
