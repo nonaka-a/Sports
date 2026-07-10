@@ -96,30 +96,8 @@ html, body {
     outline: none;
 }
 
-.start-btn[data-level="1"] {
-    background: linear-gradient(to bottom, #4cd964 0%, #34c759 100%);
-    border-bottom: 6px solid #248a3d;
-    box-shadow: 0 6px 0 #1b662d, 0 10px 18px rgba(0, 0, 0, 0.4);
-    text-shadow: 1px 2px 0px #1e6c31;
-}
-
-.start-btn[data-level="2"] {
-    background: linear-gradient(to bottom, #ff453a 0%, #ff3b30 100%);
-    border-bottom: 6px solid #b3241b;
-    box-shadow: 0 6px 0 #8c1b14, 0 10px 18px rgba(0, 0, 0, 0.4);
-    text-shadow: 1px 2px 0px #8e1810;
-}
-
 .start-btn:hover {
     transform: translateY(-2px);
-}
-
-.start-btn[data-level="1"]:hover {
-    box-shadow: 0 8px 0 #1b662d, 0 12px 22px rgba(0, 0, 0, 0.45);
-}
-
-.start-btn[data-level="2"]:hover {
-    box-shadow: 0 8px 0 #8c1b14, 0 12px 22px rgba(0, 0, 0, 0.45);
 }
 
 .start-btn:active {
@@ -127,12 +105,50 @@ html, body {
     border-bottom-width: 2px;
 }
 
-.start-btn[data-level="1"]:active {
-    box-shadow: 0 2px 0 #1b662d, 0 4px 8px rgba(0, 0, 0, 0.4);
+/* 各種セットアップUI用の定義 */
+.setup-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
-.start-btn[data-level="2"]:active {
-    box-shadow: 0 2px 0 #8c1b14, 0 4px 8px rgba(0, 0, 0, 0.4);
+.setup-label {
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 10px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.level-select-container, .point-select-container {
+    display: flex;
+    gap: 12px;
+}
+
+.setup-opt-btn {
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #ccc;
+    background: #252525;
+    border: 2px solid #444;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+}
+
+.setup-opt-btn:hover {
+    background: #333;
+    color: #fff;
+}
+
+.setup-opt-btn.active {
+    background: #ff9500;
+    color: #fff;
+    border-color: #ffd700;
+    box-shadow: 0 0 12px rgba(255, 149, 0, 0.4);
 }
 
 #back-to-title {

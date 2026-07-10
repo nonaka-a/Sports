@@ -9,7 +9,7 @@ let playerScore = 0;
 let npcScore = 0;
 let gameState = 'waiting';
 let npcLevel = 1;
-const MATCH_POINT = 21;
+let matchPoint = 21; // MATCH_POINTを動的な設定項目に変更
 
 const GameCore = {
     courtWidth: 12, courtLength: 20, netHeight: 2.2, hitRadius: 2.0,
@@ -70,21 +70,33 @@ const GameCore = {
 
         this.initInputs();
 
-        document.querySelectorAll('.start-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                npcLevel = parseInt(e.target.dataset.level);
+        // 最終的なスタートボタン押下時のフロー構築
+        const finalStartBtn = document.getElementById('final-start-btn');
+        if (finalStartBtn) {
+            finalStartBtn.addEventListener('click', () => {
+                // アクティブなレベルボタンからNPCレベルを取得
+                const activeLevelBtn = document.querySelector('.level-opt.active');
+                if (activeLevelBtn) {
+                    npcLevel = parseInt(activeLevelBtn.dataset.level);
+                }
+                // アクティブなマッチポイントボタンからポイント数を取得
+                const activePointBtn = document.querySelector('.point-opt.active');
+                if (activePointBtn) {
+                    matchPoint = parseInt(activePointBtn.dataset.point);
+                }
+
                 if (typeof UIManager !== 'undefined') UIManager.showStartScreen(false);
                 this.resetGame();
                 this.resetToServe('player');
             });
-        });
+        }
 
         window.addEventListener('resize', () => this.onResize());
         
         this.animate();
     },
 
-  buildField() {
+    buildField() {
         // グラウンド（体育館の床）
         const groundGeo = new THREE.PlaneGeometry(120, 120);
         const groundMat = new THREE.MeshStandardMaterial({ color: 0x1d3a24, roughness: 0.9 });
@@ -471,7 +483,7 @@ const GameCore = {
         this.scene.add(this.shuttleShadow);
     },
 
-   initInputs() {
+    initInputs() {
         window.addEventListener('keydown', (e) => {
             if (e.key === ' ' || e.code === 'Space') { keys.Space = true; this.startCharging(); }
             if (e.code === 'KeyW' || e.key === 'ArrowUp') keys.w = true; 
@@ -590,10 +602,55 @@ const GameCore = {
             PlayerManager.npcHasHitRight = true; PlayerManager.isAirborneWaiting = false;
         } else {
             this.npcSwingTime = 0;
+            // レベル3およびMAX NPC：プレイヤーの位置の逆サイドをより高い精度で射抜く
             let tx = this.playerGroup.position.x > 0 ? -3.4 : 3.4;
+            if (npcLevel === 3 || npcLevel === 4) {
+                tx = this.playerGroup.position.x > 1.2 ? -4.0 : (this.playerGroup.position.x < -1.2 ? 4.0 : (Math.random() > 0.5 ? 4.0 : -4.0));
+            }
+
             let tz = this.courtLength / 2 - 1.5 - Math.random() * 2.0;
             
-            if (npcLevel === 2 && this.shuttlePhys.pos.y > 2.5 && this.shuttlePhys.pos.z < -2.0) {
+            if (npcLevel === 4) {
+                // レベルMAX：高く打ち上げられたチャンスボール（Y >= 3.0, Z < -3.0）なら100%スマッシュを狙う
+                const isChanceBall = this.shuttlePhys.pos.y >= 3.0 && this.shuttlePhys.pos.z < -3.0;
+
+                if (PlayerManager.npcIsJumping && isChanceBall) {
+                    const jumpHitPointNPC = new THREE.Vector3(this.npcGroup.position.x, 2.3 + (PlayerManager.npcJumpY * 0.5), this.npcGroup.position.z);
+                    BadmintonPhysics.calculateSmash(jumpHitPointNPC, new THREE.Vector3(tx, 0.1, tz), 100, this.shuttlePhys);
+                } else if (isChanceBall) {
+                    BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
+                } else {
+                    // チャンスボール以外は、30%の確率でドロップショット、70%の確率でクリア（ロブ）
+                    if (Math.random() < 0.30) {
+                        const dropTx = this.playerGroup.position.x > 0 ? -3.8 : 3.8;
+                        const dropTz = 2.0 + Math.random() * 1.0;
+                        BadmintonPhysics.calculateDrop(this.shuttlePhys.pos, new THREE.Vector3(dropTx, 0.1, dropTz), 2.4, this.shuttlePhys);
+                    } else {
+                        BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 5.4 + Math.random() * 1.5, this.shuttlePhys);
+                    }
+                }
+            } else if (npcLevel === 3) {
+                // 新レベル3：チャンスボールであっても50%の確率でのみスマッシュを打つ
+                const isChanceBall = this.shuttlePhys.pos.y >= 3.0 && this.shuttlePhys.pos.z < -3.0;
+
+                if (isChanceBall && Math.random() < 0.50) {
+                    if (PlayerManager.npcIsJumping) {
+                        const jumpHitPointNPC = new THREE.Vector3(this.npcGroup.position.x, 2.3 + (PlayerManager.npcJumpY * 0.5), this.npcGroup.position.z);
+                        BadmintonPhysics.calculateSmash(jumpHitPointNPC, new THREE.Vector3(tx, 0.1, tz), 100, this.shuttlePhys);
+                    } else {
+                        BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
+                    }
+                } else {
+                    // 通常打ち：ドロップショットは確率を下げて12%のみ、残りは安定したクリア（ロブ）
+                    if (Math.random() < 0.12) {
+                        const dropTx = this.playerGroup.position.x > 0 ? -3.8 : 3.8;
+                        const dropTz = 2.0 + Math.random() * 1.0;
+                        BadmintonPhysics.calculateDrop(this.shuttlePhys.pos, new THREE.Vector3(dropTx, 0.1, dropTz), 2.4, this.shuttlePhys);
+                    } else {
+                        BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 5.2 + Math.random() * 1.5, this.shuttlePhys);
+                    }
+                }
+            } else if (npcLevel === 2 && this.shuttlePhys.pos.y > 2.5 && this.shuttlePhys.pos.z < -2.0) {
                 BadmintonPhysics.calculateSmash(this.shuttlePhys.pos, new THREE.Vector3(tx, 0.1, tz), 85, this.shuttlePhys);
             } else {
                 BadmintonPhysics.calculateLob(this.shuttlePhys.pos, new THREE.Vector3(tx, 0, tz), 4.8 + Math.random() * 2.0, this.shuttlePhys);
@@ -630,7 +687,8 @@ const GameCore = {
         } else { 
             npcScore++; document.getElementById('npc-score').innerText = npcScore; this.showBanner("POINT FOR NPC!", "#ff3b30"); 
         }
-        if (playerScore >= MATCH_POINT || npcScore >= MATCH_POINT) {
+
+        if (playerScore >= matchPoint || npcScore >= matchPoint) {
             if (typeof UIManager !== 'undefined') setTimeout(() => UIManager.showResult(playerScore, npcScore), 1500);
         } else {
             setTimeout(() => this.resetToServe(winner === 'player' ? 'player' : 'npc'), 2200);
@@ -652,6 +710,12 @@ const GameCore = {
         PlayerManager.playerHasHitRight = true; PlayerManager.npcHasHitRight = true;
         PlayerManager.isJumping = false; PlayerManager.isAirborneWaiting = false;
         PlayerManager.jumpY = 0; PlayerManager.jumpVel = 0;
+        
+        // NPCのジャンプ状態もリセット
+        PlayerManager.npcIsJumping = false; PlayerManager.npcJumpY = 0; PlayerManager.npcJumpVel = 0;
+        const npcBodyM = this.npcGroup.getObjectByName("bodyMesh");
+        if (npcBodyM) npcBodyM.position.y = 0.5;
+
         if (nextServer === 'player') {
             gameState = 'serve-player'; this.shuttlePhys.pos.set(0.5, 1.2, 5.5); this.shuttlePhys.vel.set(0, 0, 0);
         } else {
@@ -729,8 +793,21 @@ const GameCore = {
         PlayerManager.updateNPC(this.npcGroup, this.shuttlePhys, gameState, dt, npcLevel);
 
         if (gameState === 'rally') {
-            if (PlayerManager.npcHasHitRight && this.npcGroup.position.distanceTo(this.shuttlePhys.pos) < this.hitRadius && this.shuttlePhys.vel.z < 0 && this.shuttlePhys.pos.z < 1.5) {
-                this.hitShuttle('npc', 80);
+            // NPCのヒット判定（レベル3およびレベルMAXのジャンプに対応）
+            const isNpcInRange = PlayerManager.checkShuttleInRange(
+                this.npcGroup.position, 
+                PlayerManager.npcJumpY, 
+                this.shuttlePhys.pos, 
+                this.hitRadius
+            );
+
+            if (PlayerManager.npcHasHitRight && isNpcInRange && this.shuttlePhys.vel.z < 0 && this.shuttlePhys.pos.z < 1.5) {
+                // レベル3 or レベルMAXでジャンプ中ならパワー100で処理
+                let power = 70;
+                if (npcLevel === 3 || npcLevel === 4) {
+                    power = PlayerManager.npcIsJumping ? 100 : 80;
+                }
+                this.hitShuttle('npc', power);
                 PlayerManager.npcHasHitRight = false;
             }
             this.shuttlePhys.vel.y += BadmintonPhysics.gravity * dt;

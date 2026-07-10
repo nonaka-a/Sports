@@ -61,6 +61,35 @@ const UIManager = {
             document.addEventListener('mozfullscreenchange', updateFSBtnText);
             document.addEventListener('MSFullscreenChange', updateFSBtnText);
         }
+
+        // タイトル初期表示のセットアップフロー
+        const playGameBtn = document.getElementById('play-game-btn');
+        const titleMainZone = document.getElementById('title-main-zone');
+        const gameSetupZone = document.getElementById('game-setup-zone');
+
+        if (playGameBtn && titleMainZone && gameSetupZone) {
+            playGameBtn.addEventListener('click', () => {
+                titleMainZone.style.display = 'none';
+                gameSetupZone.style.display = 'flex';
+            });
+        }
+
+        // 設定の選択状態の更新トグル
+        const levelOpts = document.querySelectorAll('.level-opt');
+        levelOpts.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                levelOpts.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        const pointOpts = document.querySelectorAll('.point-opt');
+        pointOpts.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                pointOpts.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
     },
 
     toggleSettings(show) {
@@ -93,8 +122,16 @@ const UIManager = {
     showStartScreen(show) {
         const start = document.getElementById('start-screen');
         const ui = document.getElementById('ui-layer');
+        const titleMainZone = document.getElementById('title-main-zone');
+        const gameSetupZone = document.getElementById('game-setup-zone');
+
         if (start) start.style.display = show ? 'flex' : 'none';
         if (ui) ui.style.display = show ? 'none' : 'flex';
+        
+        if (show) {
+            if (titleMainZone) titleMainZone.style.display = 'block';
+            if (gameSetupZone) gameSetupZone.style.display = 'none';
+        }
     },
 
     showResult(playerScore, npcScore) {

@@ -29,9 +29,33 @@
     <!-- スタート画面 -->
     <div id="start-screen">
         <h1>3D BADMINTON</h1>
-        <div class="level-select">
-            <button class="start-btn" data-level="1">LEVEL 1 (EASY)</button>
-            <button class="start-btn" data-level="2">LEVEL 2 (HARD)</button>
+        
+        <!-- 初期：試合をするボタン -->
+        <div id="title-main-zone">
+            <button id="play-game-btn" class="start-btn" style="background: linear-gradient(to bottom, #ff9500 0%, #e68500 100%); border-bottom: 6px solid #b36700; box-shadow: 0 6px 0 #8c5000, 0 10px 18px rgba(0, 0, 0, 0.4); text-shadow: 1px 2px 0px #9e5b00; width: 240px;">試合をする</button>
+        </div>
+
+        <!-- 設定パネル（初期非表示） -->
+        <div id="game-setup-zone" style="display: none; flex-direction: column; align-items: center; gap: 24px; background: rgba(0,0,0,0.6); padding: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15);">
+            <div class="setup-group">
+                <div class="setup-label">NPC LEVEL</div>
+                <div class="level-select-container">
+                    <button class="setup-opt-btn level-opt active" data-level="1">LEVEL 1</button>
+                    <button class="setup-opt-btn level-opt" data-level="2">LEVEL 2</button>
+                    <button class="setup-opt-btn level-opt" data-level="3">LEVEL 3</button>
+                    <button class="setup-opt-btn level-opt" data-level="4">LEVEL MAX</button>
+                </div>
+            </div>
+
+            <div class="setup-group">
+                <div class="setup-label">MATCH POINT</div>
+                <div class="point-select-container">
+                    <button class="setup-opt-btn point-opt" data-point="10">10 PTS</button>
+                    <button class="setup-opt-btn point-opt active" data-point="21">21 PTS</button>
+                </div>
+            </div>
+
+            <button id="final-start-btn" class="start-btn" style="background: linear-gradient(to bottom, #4cd964 0%, #34c759 100%); border-bottom: 6px solid #248a3d; box-shadow: 0 6px 0 #1b662d, 0 10px 18px rgba(0, 0, 0, 0.4); text-shadow: 1px 2px 0px #1e6c31; margin-top: 10px; width: 200px;">START</button>
         </div>
     </div>
 
