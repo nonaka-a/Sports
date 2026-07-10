@@ -544,7 +544,7 @@ const GameCore = {
                 this.npcGroup.position, 
                 PlayerManager.npcJumpY, 
                 this.shuttlePhys.pos, 
-                this.hitRadius
+                this.hitRadius * 0.85 // NPCのみ射程を15%縮小（2.0 -> 1.7）
             );
 
             if (PlayerManager.npcHasHitRight && isNpcInRange && this.shuttlePhys.vel.z < 0 && this.shuttlePhys.pos.z < 1.5) {
