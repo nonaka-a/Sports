@@ -127,10 +127,22 @@ const PlayerManager = {
             }
             targetZ = Math.max(-this.COURT_LIMIT_Z_MAX, Math.min(-this.COURT_LIMIT_Z_MIN, targetZ));
         } else {
-            // シャトルが自分のコートに飛んできていない時は、遅延タイマーをリセットし、中央ポジション付近に戻る
+            // シャトルが自分のコートに飛んできていない時は、遅延タイマーをリセット
             this.npcReactionTimer = 0;
-            targetX = 0;
-            targetZ = -6.5;
+            if (npcLevel === 1) {
+                // レベル1は中央に戻らずその場に完全に立ち止まる
+                targetX = npcGroup.position.x;
+                targetZ = npcGroup.position.z;
+            } else if (npcLevel === 2) {
+                // レベル2は中央を目標にしつつ、戻る速度を大幅に下げることで「ちょっとだけ中央に戻る」挙動にする
+                targetX = 0;
+                targetZ = -6.5;
+                currentNpcSpeed = this.npcSpeed * 0.35; // 戻り速度を通常の35%に制限
+            } else {
+                // レベル3以上は速やかに中央ポジション付近に戻る
+                targetX = 0;
+                targetZ = -6.5;
+            }
         }
         
         const dx = targetX - npcGroup.position.x;

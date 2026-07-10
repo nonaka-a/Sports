@@ -236,12 +236,62 @@ const GameCore = {
 
     buildShuttle() {
         this.shuttleGroup = new THREE.Group();
-        this.shuttleGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshStandardMaterial({ color: 0xdddddd })));
-        const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.06, 0.16, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
-        skirt.position.y = 0.08; this.shuttleGroup.add(skirt);
+
+        // 1. コルクベース（デフォルメされた白い半球）
+        const corkGeo = new THREE.SphereGeometry(0.06, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const corkMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.75 });
+        const cork = new THREE.Mesh(corkGeo, corkMat);
+        cork.rotation.x = Math.PI; // コルクが下を向くように回転
+        this.shuttleGroup.add(cork);
+
+        // 2. コルクテープ（本物のシャトルらしい赤いラインテープのアクセント）
+        const tapeGeo = new THREE.CylinderGeometry(0.0605, 0.0605, 0.012, 16, 1);
+        const tapeMat = new THREE.MeshBasicMaterial({ color: 0xcc1100 });
+        const tape = new THREE.Mesh(tapeGeo, tapeMat);
+        tape.position.y = -0.01;
+        this.shuttleGroup.add(tape);
+
+        // 3. 羽スカート（半透明の円錐台アウター ＋ 骨組み表現のワイヤーフレームインナー）
+        const skirtGeo = new THREE.CylinderGeometry(0.12, 0.06, 0.16, 16, 1, true);
+        
+        // アウター（半透明のスカート本体）
+        const skirtMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            side: THREE.DoubleSide, 
+            transparent: true, 
+            opacity: 0.65,
+            roughness: 0.9
+        });
+        const skirt = new THREE.Mesh(skirtGeo, skirtMat);
+        skirt.position.y = 0.08;
+        this.shuttleGroup.add(skirt);
+
+        // インナー（16分割されたセグメントを活かして、羽の縦筋をワイヤーフレームで表現）
+        const skeletonMat = new THREE.MeshBasicMaterial({
+            color: 0xeeeeee,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.8
+        });
+        const skeleton = new THREE.Mesh(skirtGeo, skeletonMat);
+        skeleton.position.y = 0.08;
+        this.shuttleGroup.add(skeleton);
+
+        // 4. 羽を固定する補強糸（デフォルメされた細いリングを1本配置）
+        const ringGeo = new THREE.TorusGeometry(0.09, 0.002, 4, 16);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 0.09;
+        this.shuttleGroup.add(ring);
+
         this.scene.add(this.shuttleGroup);
 
-        this.shuttleShadow = new THREE.Mesh(new THREE.RingGeometry(0, 0.18, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
+        // 影
+        this.shuttleShadow = new THREE.Mesh(
+            new THREE.RingGeometry(0, 0.18, 32), 
+            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 })
+        );
         this.shuttleShadow.rotation.x = -Math.PI / 2; 
         this.shuttleShadow.position.y = 0.025; 
         this.scene.add(this.shuttleShadow);
@@ -540,11 +590,13 @@ const GameCore = {
         PlayerManager.updateNPC(this.npcGroup, this.shuttlePhys, gameState, dt, npcLevel);
 
         if (gameState === 'rally') {
+            // レベル3、MAX(4)は元の射程(100%)、レベル1、2は狭めた射程(85%)を適用
+            const npcRangeRadius = (npcLevel === 3 || npcLevel === 4) ? this.hitRadius : this.hitRadius * 0.85;
             const isNpcInRange = PlayerManager.checkShuttleInRange(
                 this.npcGroup.position, 
                 PlayerManager.npcJumpY, 
                 this.shuttlePhys.pos, 
-                this.hitRadius * 0.85 // NPCのみ射程を15%縮小（2.0 -> 1.7）
+                npcRangeRadius
             );
 
             if (PlayerManager.npcHasHitRight && isNpcInRange && this.shuttlePhys.vel.z < 0 && this.shuttlePhys.pos.z < 1.5) {
@@ -560,6 +612,8 @@ const GameCore = {
             if (sp > 0.01) {
                 this.shuttlePhys.vel.sub(this.shuttlePhys.vel.clone().normalize().multiplyScalar(Math.min(BadmintonPhysics.airDrag * sp * dt, sp)));
             }
+            // 物理演算による位置更新の前に、前フレームの位置を保存
+            const prevPos = this.shuttlePhys.pos.clone();
             this.shuttlePhys.pos.addScaledVector(this.shuttlePhys.vel, dt);
             this.shuttleGroup.position.copy(this.shuttlePhys.pos);
             
@@ -570,8 +624,24 @@ const GameCore = {
             
             this.shuttleShadow.position.set(this.shuttlePhys.pos.x, 0.02, this.shuttlePhys.pos.z);
             
-            if (Math.abs(this.shuttlePhys.pos.z) < 0.18 && this.shuttlePhys.pos.y < this.netHeight) {
-                this.shuttlePhys.vel.set(0, -3.0, this.shuttlePhys.pos.z > 0 ? 0.5 : -0.5);
+            // ネットすり抜け防止のためのスイープ（線分交差）判定
+            const crossedNet = (prevPos.z > 0 && this.shuttlePhys.pos.z <= 0) || (prevPos.z < 0 && this.shuttlePhys.pos.z >= 0);
+            if (crossedNet) {
+                const dz = this.shuttlePhys.pos.z - prevPos.z;
+                if (Math.abs(dz) > 0.0001) {
+                    // Z = 0を通過した内分比 t を算出
+                    const t = -prevPos.z / dz;
+                    // Z = 0の時点での推測高さ Y
+                    const yAtNet = prevPos.y + t * (this.shuttlePhys.pos.y - prevPos.y);
+                    
+                    if (yAtNet < this.netHeight) {
+                        // ネットより低い位置を通過しようとした場合、ネット衝突とみなす
+                        // シャトルを打ったコート側にわずかに押し戻し、落下運動に移行させる
+                        this.shuttlePhys.pos.z = prevPos.z > 0 ? 0.08 : -0.08;
+                        this.shuttlePhys.pos.y = yAtNet;
+                        this.shuttlePhys.vel.set(0, -3.0, prevPos.z > 0 ? 0.6 : -0.6);
+                    }
+                }
             }
             
             if (this.shuttlePhys.pos.y <= 0.12) {
