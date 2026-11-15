@@ -14,6 +14,7 @@
     <!-- 設定メニュー（一時停止） -->
     <div id="settings-menu" style="display: none;">
         <div class="menu-content">
+            <div class="panel-header-tag">MATCH PAUSED</div>
             <h2>PAUSED</h2>
             
             <div class="settings-options">
@@ -21,38 +22,56 @@
                 <button id="toggle-fullscreen-btn" class="menu-option-btn">全画面</button>
             </div>
             
-            <button id="resume-btn" class="menu-btn">再開</button>
+            <button id="resume-btn" class="menu-btn">試合を再開</button>
             <button id="menu-back-to-title" class="menu-btn danger">タイトルへ戻る</button>
         </div>
     </div>
 
     <!-- スタート画面 -->
     <div id="start-screen">
-        <h1>3D BADMINTON</h1>
+        <div class="title-header">
+            <div class="title-badge">PRO ARENA SERIES</div>
+            <h1 class="game-logo">
+                <span class="logo-accent">3D</span> BADMINTON
+            </h1>
+            <div class="logo-subline"></div>
+        </div>
         
         <!-- 初期：試合をするボタン -->
         <div id="title-main-zone">
-            <button id="play-game-btn" class="start-btn" style="background: linear-gradient(to bottom, #ff9500 0%, #e68500 100%); border-bottom: 6px solid #b36700; box-shadow: 0 6px 0 #8c5000, 0 10px 18px rgba(0, 0, 0, 0.4); text-shadow: 1px 2px 0px #9e5b00; width: 240px;">試合をする</button>
+            <button id="play-game-btn" class="start-btn play-btn">
+                <span class="btn-icon">▶</span> 試合をする
+            </button>
+            <div class="controls-guide">
+                <div class="guide-item"><span class="key-badge">WASD / 矢印</span> 移動</div>
+                <div class="guide-item"><span class="key-badge">SPACE</span> ショット / 長押しスマッシュ</div>
+                <div class="guide-item"><span class="key-badge">S + SPACE</span> ドロップ</div>
+            </div>
         </div>
 
         <!-- 設定パネル（初期非表示） -->
-        <div id="game-setup-zone" style="display: none; flex-direction: column; align-items: center; gap: 20px; background: rgba(0,0,0,0.6); padding: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15);">
-            
+        <div id="game-setup-zone" style="display: none;">
+            <div class="setup-header">MATCH SETUP</div>
+
             <div class="setup-group">
-                <div class="setup-label">COURT</div>
-                <div class="court-select-container" style="display: flex; gap: 12px;">
-                    <button class="setup-opt-btn court-opt active" data-court="gym">NORMAL</button>
-                    <button class="setup-opt-btn court-opt" data-court="cute">CUTE</button>
+                <div class="setup-label">COURT STAGE</div>
+                <div class="court-select-container">
+                    <button class="setup-opt-btn court-opt active" data-court="gym">
+                        <span class="dot-indicator dot-gym"></span>NORMAL
+                    </button>
+                    <button class="setup-opt-btn court-opt" data-court="cute">
+                        <span class="dot-indicator dot-cute"></span>CUTE
+                    </button>
                 </div>
             </div>
 
             <div class="setup-group">
                 <div class="setup-label">NPC LEVEL</div>
                 <div class="level-select-container">
-                    <button class="setup-opt-btn level-opt active" data-level="1">LEVEL 1</button>
-                    <button class="setup-opt-btn level-opt" data-level="2">LEVEL 2</button>
-                    <button class="setup-opt-btn level-opt" data-level="3">LEVEL 3</button>
-                    <button class="setup-opt-btn level-opt" data-level="4">LEVEL MAX</button>
+                    <button class="setup-opt-btn level-opt active" data-level="1">LV.1</button>
+                    <button class="setup-opt-btn level-opt" data-level="2">LV.2</button>
+                    <button class="setup-opt-btn level-opt" data-level="3">LV.3</button>
+                    <button class="setup-opt-btn level-opt level-max" data-level="4">MAX</button>
                 </div>
             </div>
 
@@ -64,15 +83,23 @@
                 </div>
             </div>
 
-            <button id="final-start-btn" class="start-btn" style="background: linear-gradient(to bottom, #4cd964 0%, #34c759 100%); border-bottom: 6px solid #248a3d; box-shadow: 0 6px 0 #1b662d, 0 10px 18px rgba(0, 0, 0, 0.4); text-shadow: 1px 2px 0px #1e6c31; margin-top: 10px; width: 200px;">START</button>
+            <div class="setup-actions">
+                <button id="setup-back-btn" class="setup-back-btn" type="button">戻る</button>
+                <button id="final-start-btn" class="start-btn launch-btn">START MATCH</button>
+            </div>
         </div>
     </div>
 
     <!-- リザルト画面 -->
     <div id="result-screen" style="display: none;">
         <div class="result-content">
+            <div class="panel-header-tag">FINAL RESULT</div>
             <h2 id="result-title">YOU WIN!</h2>
-            <div id="result-score">21 - 15</div>
+            <div class="result-score-box">
+                <span class="result-side side-player">YOU</span>
+                <div id="result-score">21 - 15</div>
+                <span class="result-side side-npc">NPC</span>
+            </div>
             <button id="result-back-to-title" class="menu-btn">タイトルへ戻る</button>
         </div>
     </div>
@@ -80,39 +107,65 @@
     <!-- プレイ中UI -->
     <div id="ui-layer" style="display: none;">
         <!-- 設定ボタンを ui-layer 内に配置 -->
-        <div id="settings-btn">
+        <div id="settings-btn" title="Pause / Settings">
             <img src="images/haguruma.png" alt="Settings">
         </div>
         
         <div id="scoreboard">
             <div class="score-box" id="player-score-box">
-                <div class="score-label">PLAYER</div>
-                <div class="score-value" id="player-score">0</div>
+                <div class="score-team-bar bar-player"></div>
+                <div class="score-info">
+                    <div class="score-label">PLAYER</div>
+                    <div class="score-value" id="player-score">0</div>
+                </div>
             </div>
+            <div class="score-divider">VS</div>
             <div class="score-box" id="npc-score-box">
-                <div class="score-label">NPC</div>
-                <div class="score-value" id="npc-score">0</div>
+                <div class="score-info">
+                    <div class="score-label">NPC</div>
+                    <div class="score-value" id="npc-score">0</div>
+                </div>
+                <div class="score-team-bar bar-npc"></div>
             </div>
         </div>
+
         <div id="message-banner">POINT FOR YOU</div>
+
         <div id="controls-container">
             <div id="dpad-zone">
                 <div class="dpad-btn" id="dpad-up">
-                    <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h16z" fill="#444444"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="M12 5l-7 8h14z" fill="currentColor"/></svg>
                 </div>
                 <div class="dpad-btn" id="dpad-left">
-                    <svg viewBox="0 0 24 24"><path d="M4 12l8 8v-16z" fill="#444444"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="M5 12l8 7v-14z" fill="currentColor"/></svg>
                 </div>
                 <div class="dpad-btn" id="dpad-right">
-                    <svg viewBox="0 0 24 24"><path d="M20 12l-8-8v16z" fill="#444444"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="M19 12l-8-7v14z" fill="currentColor"/></svg>
                 </div>
                 <div class="dpad-btn" id="dpad-down">
-                    <svg viewBox="0 0 24 24"><path d="M12 20l8-8h-16z" fill="#444444"/></svg>
+                    <svg viewBox="0 0 24 24"><path d="M12 19l7-8h-14z" fill="currentColor"/></svg>
                 </div>
             </div>
+
             <div id="action-zone">
-                <div id="power-meter"><div id="power-fill"></div></div>
-                <div id="hit-button"></div>
+                <div class="power-wrapper">
+                    <div class="power-label-row">
+                        <span>POWER</span>
+                        <span class="smash-tag">SMASH</span>
+                    </div>
+                    <div id="power-meter">
+                        <div class="smash-threshold-line"></div>
+                        <div id="power-fill"></div>
+                    </div>
+                </div>
+                <div id="hit-button">
+                    <svg class="hit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="14.5" cy="8.5" rx="4.5" ry="6" transform="rotate(40 14.5 8.5)"/>
+                        <line x1="10.5" y1="13" x2="5" y2="19"/>
+                        <circle cx="7" cy="6" r="1.4" fill="currentColor" stroke="none"/>
+                    </svg>
+                    <span class="hit-label">HIT</span>
+                </div>
             </div>
         </div>
     </div>

@@ -8,7 +8,7 @@ const UIManager = {
         if (settingsBtn) {
             settingsBtn.addEventListener('click', () => this.toggleSettings(true));
         }
-        
+
         const resumeBtn = document.getElementById('resume-btn');
         if (resumeBtn) {
             resumeBtn.addEventListener('click', () => this.toggleSettings(false));
@@ -39,7 +39,7 @@ const UIManager = {
                 if (typeof BadmintonAudio !== 'undefined') {
                     BadmintonAudio.isMuted = !BadmintonAudio.isMuted;
                     audioBtn.innerText = BadmintonAudio.isMuted ? "音 OFF" : "音 ON";
-                    audioBtn.style.background = BadmintonAudio.isMuted ? "#555" : "#333";
+                    audioBtn.classList.toggle('is-off', BadmintonAudio.isMuted);
                 }
             });
         }
@@ -53,7 +53,7 @@ const UIManager = {
             const updateFSBtnText = () => {
                 const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
                 fullscreenBtn.innerText = isFS ? "窓表示" : "全画面";
-                fullscreenBtn.style.background = isFS ? "#555" : "#333";
+                fullscreenBtn.classList.toggle('is-off', Boolean(isFS));
             };
             document.addEventListener('fullscreenchange', updateFSBtnText);
             document.addEventListener('webkitfullscreenchange', updateFSBtnText);
@@ -63,6 +63,7 @@ const UIManager = {
 
         // タイトル初期表示のセットアップフロー
         const playGameBtn = document.getElementById('play-game-btn');
+        const setupBackBtn = document.getElementById('setup-back-btn');
         const titleMainZone = document.getElementById('title-main-zone');
         const gameSetupZone = document.getElementById('game-setup-zone');
 
@@ -73,28 +74,35 @@ const UIManager = {
             });
         }
 
+        if (setupBackBtn && titleMainZone && gameSetupZone) {
+            setupBackBtn.addEventListener('click', () => {
+                gameSetupZone.style.display = 'none';
+                titleMainZone.style.display = 'flex';
+            });
+        }
+
         // 設定の選択状態の更新トグル
         const courtOpts = document.querySelectorAll('.court-opt');
         courtOpts.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', () => {
                 courtOpts.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
+                btn.classList.add('active');
             });
         });
 
         const levelOpts = document.querySelectorAll('.level-opt');
         levelOpts.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', () => {
                 levelOpts.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
+                btn.classList.add('active');
             });
         });
 
         const pointOpts = document.querySelectorAll('.point-opt');
         pointOpts.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', () => {
                 pointOpts.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
+                btn.classList.add('active');
             });
         });
     },
@@ -134,21 +142,23 @@ const UIManager = {
 
         if (start) start.style.display = show ? 'flex' : 'none';
         if (ui) ui.style.display = show ? 'none' : 'flex';
-        
+
         if (show) {
-            if (titleMainZone) titleMainZone.style.display = 'block';
+            if (titleMainZone) titleMainZone.style.display = 'flex';
             if (gameSetupZone) gameSetupZone.style.display = 'none';
         }
     },
 
     showResult(playerScore, npcScore) {
         const resultScreen = document.getElementById('result-screen');
+        const resultContent = resultScreen ? resultScreen.querySelector('.result-content') : null;
         const resultTitle = document.getElementById('result-title');
         const resultScore = document.getElementById('result-score');
         const ui = document.getElementById('ui-layer');
-        
+
+        const isWin = playerScore > npcScore;
         if (resultTitle) {
-            if (playerScore > npcScore) {
+            if (isWin) {
                 resultTitle.innerText = "YOU WIN!";
                 resultTitle.style.color = "#34c759";
             } else {
@@ -156,11 +166,13 @@ const UIManager = {
                 resultTitle.style.color = "#ff3b30";
             }
         }
-        
+        if (resultContent) {
+            resultContent.classList.toggle('lose', !isWin);
+        }
+
         if (resultScore) resultScore.innerText = `${playerScore} - ${npcScore}`;
         if (resultScreen) resultScreen.style.display = 'flex';
-        // リザルト表示中はUIを隠す
-        if (ui) ui.style.display = 'none'; 
+        if (ui) ui.style.display = 'none';
     },
 
     hideResult() {
@@ -170,6 +182,11 @@ const UIManager = {
 
     updatePowerBar(percent) {
         const fill = document.getElementById('power-fill');
+        const meter = document.getElementById('power-meter');
         if (fill) fill.style.width = `${percent}%`;
+        if (meter) {
+            meter.classList.toggle('smash-ready', percent >= 50);
+            meter.classList.toggle('max-power', percent >= 95);
+        }
     }
 };
