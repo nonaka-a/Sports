@@ -13,6 +13,8 @@ let npcLevel = 1;
 let matchPoint = 21;
 
 const GameCore = {
+    selectedSport: 'badminton',
+    activeSport: 'badminton',
     courtWidth: 12, courtLength: 20, netHeight: 2.2, hitRadius: 2.0,
     scene: null, camera: null, renderer: null, clock: null,
     playerGroup: null, npcGroup: null, shuttleGroup: null, shuttleShadow: null,
@@ -73,13 +75,28 @@ const GameCore = {
         this.buildShuttle();
         this.initVFX();
 
+        if (typeof TableTennisGame !== 'undefined') {
+            TableTennisGame.init(this);
+        }
+
         if (typeof UIManager !== 'undefined') {
             UIManager.init({
+                onSelectSport: (sport) => {
+                    this.selectedSport = sport;
+                },
                 onBackToTitle: () => {
                     UIManager.toggleSettings(false);
                     UIManager.hideResult();
                     UIManager.showStartScreen(true);
                     this.resetShuttleTrail();
+                    if (typeof TableTennisGame !== 'undefined') {
+                        TableTennisGame.setVisible(false);
+                    }
+                    this.setBadmintonVisibility(true);
+                    this.activeSport = 'badminton';
+                    this.cameraBasePos.set(0, 8, 16);
+                    this.camera.position.copy(this.cameraBasePos);
+                    this.camera.lookAt(0, 0, 0);
                     gameState = 'waiting';
                 },
                 onPauseToggle: (isPaused) => {
@@ -109,6 +126,24 @@ const GameCore = {
                 if (activePointBtn) {
                     matchPoint = parseInt(activePointBtn.dataset.point);
                 }
+
+                this.activeSport = this.selectedSport || 'badminton';
+
+                if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
+                    this.setBadmintonVisibility(false);
+                    this.resetShuttleTrail();
+                    if (typeof UIManager !== 'undefined') UIManager.showStartScreen(false);
+                    TableTennisGame.startMatch(courtType, npcLevel, matchPoint);
+                    return;
+                }
+
+                if (typeof TableTennisGame !== 'undefined') {
+                    TableTennisGame.setVisible(false);
+                }
+                this.setBadmintonVisibility(true);
+                this.cameraBasePos.set(0, 8, 16);
+                this.camera.position.copy(this.cameraBasePos);
+                this.camera.lookAt(0, 0, 0);
 
                 if (typeof EnvironmentManager !== 'undefined') {
                     EnvironmentManager.buildCourt(this.scene, courtType, {
@@ -725,6 +760,7 @@ const GameCore = {
         rightShoulder.add(rHand);
 
         const racketMesh = this.createBadmintonRacket(config.primaryColor, config.accentColor, config.stringTex);
+        racketMesh.name = "racketMesh";
         racketMesh.position.set(-0.11, 0.12, 0.13);
         racketMesh.rotation.set(0.22, 0, 0.08);
         rightShoulder.add(racketMesh);
@@ -922,12 +958,23 @@ const GameCore = {
         }
     },
 
+    setBadmintonVisibility(visible) {
+        if (this.playerGroup) this.playerGroup.visible = visible;
+        if (this.npcGroup) this.npcGroup.visible = visible;
+        if (this.shuttleGroup) this.shuttleGroup.visible = visible;
+        if (this.shuttleShadow) this.shuttleShadow.visible = visible;
+    },
+
     startCharging() {
         if (gameState !== 'ended' && gameState !== 'waiting' && (typeof UIManager === 'undefined' || !UIManager.isPaused)) isCharging = true;
     },
 
     stopCharging() {
         isCharging = false;
+        if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
+            TableTennisGame.stopCharging();
+            return;
+        }
         if (gameState === 'serve-player') {
             this.serveShuttle('player');
         } else if (gameState === 'rally' && PlayerManager.playerHasHitRight && !PlayerManager.isAirborneWaiting) {
@@ -1198,6 +1245,10 @@ const GameCore = {
         if (dt > 0.1) dt = 0.1;
         this.idleTime += dt;
         if (gameState === 'waiting' || (typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
+        if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
+            TableTennisGame.update(dt);
+            return;
+        }
 
         if (gameState === 'serve-player') {
             this.shuttlePhys.pos.set(

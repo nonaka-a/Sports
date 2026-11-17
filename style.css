@@ -277,11 +277,50 @@ html, body {
     outline: none;
 }
 
+.sport-btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    max-width: 92vw;
+}
+
+.sport-choice-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 14px 24px;
+}
+
+.sport-sub-tag {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+    opacity: 0.9;
+    font-style: normal;
+}
+
+.sport-main-txt {
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+
 .play-btn {
-    width: 260px;
+    width: 245px;
     background: linear-gradient(180deg, #ff9f0a 0%, #e67e00 100%);
     border-bottom: 5px solid #a85b00;
     box-shadow: 0 10px 25px rgba(255, 149, 0, 0.4), 0 6px 0 #7a4100;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.play-tt-btn {
+    width: 245px;
+    background: linear-gradient(180deg, #0a84ff 0%, #005ecb 100%);
+    border-bottom: 5px solid #003e8a;
+    box-shadow: 0 10px 25px rgba(10, 132, 255, 0.4), 0 6px 0 #002c63;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 

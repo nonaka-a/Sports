@@ -30,22 +30,29 @@
     <!-- スタート画面 -->
     <div id="start-screen">
         <div class="title-header">
-            <div class="title-badge">PRO ARENA SERIES</div>
+            <div class="title-badge">MULTI SPORTS ARENA</div>
             <h1 class="game-logo">
-                <span class="logo-accent">3D</span> BADMINTON
+                <span class="logo-accent">GO!GO!</span> SPORTS
             </h1>
             <div class="logo-subline"></div>
         </div>
         
-        <!-- 初期：試合をするボタン -->
+        <!-- 初期：競技選択ボタン -->
         <div id="title-main-zone">
-            <button id="play-game-btn" class="start-btn play-btn">
-                <span class="btn-icon">▶</span> 試合をする
-            </button>
+            <div class="sport-btn-group">
+                <button id="play-badminton-btn" class="start-btn play-btn sport-choice-btn">
+                    <span class="sport-sub-tag">BADMINTON</span>
+                    <span class="sport-main-txt">▶ バドミントン</span>
+                </button>
+                <button id="play-tabletennis-btn" class="start-btn play-tt-btn sport-choice-btn">
+                    <span class="sport-sub-tag">TABLE TENNIS</span>
+                    <span class="sport-main-txt">▶ 卓球</span>
+                </button>
+            </div>
             <div class="controls-guide">
                 <div class="guide-item"><span class="key-badge">WASD / 矢印</span> 移動</div>
                 <div class="guide-item"><span class="key-badge">SPACE</span> ショット / 長押しスマッシュ</div>
-                <div class="guide-item"><span class="key-badge">S + SPACE</span> ドロップ</div>
+                <div class="guide-item"><span class="key-badge">S + SPACE</span> ドロップ / ストップ</div>
             </div>
         </div>
 
@@ -175,6 +182,7 @@
     <script src="environment.js"></script>
     <script src="player.js"></script>
     <script src="ui.js"></script>
+    <script src="tabletennis.js"></script>
     <script src="game.js"></script>
 </body>
 </html>

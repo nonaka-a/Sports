@@ -62,16 +62,37 @@ const UIManager = {
         }
 
         // タイトル初期表示のセットアップフロー
-        const playGameBtn = document.getElementById('play-game-btn');
+        const playBadmintonBtn = document.getElementById('play-badminton-btn');
+        const playTableTennisBtn = document.getElementById('play-tabletennis-btn');
         const setupBackBtn = document.getElementById('setup-back-btn');
         const titleMainZone = document.getElementById('title-main-zone');
         const gameSetupZone = document.getElementById('game-setup-zone');
+        const setupHeader = document.querySelector('.setup-header');
+        const pointContainer = document.querySelector('.point-select-container');
+        const pointGroup = pointContainer ? pointContainer.closest('.setup-group') : null;
 
-        if (playGameBtn && titleMainZone && gameSetupZone) {
-            playGameBtn.addEventListener('click', () => {
-                titleMainZone.style.display = 'none';
-                gameSetupZone.style.display = 'flex';
-            });
+        const openSetupForSport = (sport) => {
+            if (this.callbacks && typeof this.callbacks.onSelectSport === 'function') {
+                this.callbacks.onSelectSport(sport);
+            }
+            if (setupHeader) {
+                setupHeader.innerText = sport === 'tabletennis'
+                    ? 'TABLE TENNIS - MATCH SETUP'
+                    : 'BADMINTON - MATCH SETUP';
+            }
+            if (pointGroup) {
+                pointGroup.style.display = sport === 'tabletennis' ? 'none' : 'flex';
+            }
+            if (titleMainZone) titleMainZone.style.display = 'none';
+            if (gameSetupZone) gameSetupZone.style.display = 'flex';
+        };
+
+        if (playBadmintonBtn) {
+            playBadmintonBtn.addEventListener('click', () => openSetupForSport('badminton'));
+        }
+
+        if (playTableTennisBtn) {
+            playTableTennisBtn.addEventListener('click', () => openSetupForSport('tabletennis'));
         }
 
         if (setupBackBtn && titleMainZone && gameSetupZone) {

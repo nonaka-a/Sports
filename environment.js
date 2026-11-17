@@ -648,8 +648,10 @@ const EnvironmentManager = {
         court.position.y = 0.01;
         group.add(court);
 
-        this.buildCourtLines(group, courtWidth, courtLength);
-        this.buildNet(group, courtWidth, netHeight, 0x333333, 0x1b6b42, '#2a1810');
+        if (!options.isTableTennis) {
+            this.buildCourtLines(group, courtWidth, courtLength);
+            this.buildNet(group, courtWidth, netHeight, 0x333333, 0x1b6b42, '#2a1810');
+        }
 
         this.buildCourtSideProps(group, courtWidth, {
             chairFrame: 0xcccccc,
@@ -752,8 +754,10 @@ const EnvironmentManager = {
             group.add(heart);
         });
 
-        this.buildCourtLines(group, courtWidth, courtLength);
-        this.buildNet(group, courtWidth, netHeight, 0xffffff, 0xff69b4, '#ff1493');
+       if (!options.isTableTennis) {
+            this.buildCourtLines(group, courtWidth, courtLength);
+            this.buildNet(group, courtWidth, netHeight, 0xffffff, 0xff69b4, '#ff1493');
+        }
 
         this.buildCourtSideProps(group, courtWidth, {
             chairFrame: 0xffffff,
