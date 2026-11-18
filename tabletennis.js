@@ -42,7 +42,9 @@ const TableTennisGame = {
     ttMatchPoint: 11,
     lastHitter: 'player',
     receiverBounces: 0,
+    lastReceiverBounceZ: null,
     isServeFirstBounce: false,
+    isShortServeActive: false,
     netFault: false,
     playerCanHit: true,
     npcCanHit: false,
@@ -576,7 +578,9 @@ const TableTennisGame = {
         this.ballBounceScaleY = 0.82;
         this.ballBounceScaleZ = 0.97;
         this.receiverBounces = 0;
+        this.lastReceiverBounceZ = null;
         this.isServeFirstBounce = false;
+        this.isShortServeActive = false;
         this.netFault = false;
         this.npcReactionTimer = 0;
         this.servePhase = 'idle';
@@ -655,7 +659,9 @@ const TableTennisGame = {
         this.ballBounceScaleZ = 0.97;
         this.netFault = false;
         this.receiverBounces = 0;
+        this.lastReceiverBounceZ = null;
         this.isServeFirstBounce = true;
+        this.isShortServeActive = (server === 'player' && !isLongServe);
         this.servePhase = 'idle';
         this.lastHitter = server;
         this.npcReactionTimer = 0;
@@ -782,8 +788,10 @@ const TableTennisGame = {
 
         const targetY = this.tableHeight + this.ballRadius;
         this.isServeFirstBounce = false;
+        this.isShortServeActive = false;
         this.netFault = false;
         this.receiverBounces = 0;
+        this.lastReceiverBounceZ = null;
         this.lastHitter = hitter;
 
         if (hitter === 'player') {
@@ -988,11 +996,22 @@ const TableTennisGame = {
                 targetX = this.npcGroup.position.x;
                 targetZ = this.npcGroup.position.z;
             } else if (npcLevel >= 3) {
-                const predicted = this.predictBallAtZ(this.npcZMax - 0.25);
-                const px = predicted ? predicted.x : this.ballPos.x;
-                const pz = predicted ? predicted.z : this.ballPos.z;
-                targetX = Math.max(-this.limitX, Math.min(this.limitX, px + 0.48));
-                targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, pz - 0.55));
+                if (this.isShortServeActive) {
+                    const aimX = this.isServeFirstBounce ? this.serveDestX : this.ballPos.x;
+                    targetX = Math.max(-this.limitX, Math.min(this.limitX, aimX + 0.42));
+                    targetZ = this.npcZMax;
+                } else if (this.isServeFirstBounce) {
+                    targetX = Math.max(-this.limitX, Math.min(this.limitX, this.serveDestX + 0.48));
+                    targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, this.serveDestZ - 1.75));
+                } else {
+                    const info = this.predictBallInfo(-2.3);
+                    const bz = (this.receiverBounces >= 1 && this.lastReceiverBounceZ !== null)
+                        ? this.lastReceiverBounceZ
+                        : (info.bounce ? info.bounce.z : (info.hit ? info.hit.z : this.ballPos.z));
+                    const px = info.hit ? info.hit.x : (info.bounce ? info.bounce.x : this.ballPos.x);
+                    targetX = Math.max(-this.limitX, Math.min(this.limitX, px + 0.48));
+                    targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, bz - 1.75));
+                }
             } else {
                 targetX = Math.max(-this.limitX, Math.min(this.limitX, this.ballPos.x + 0.42));
                 targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, this.ballPos.z - 0.65));
@@ -1071,23 +1090,32 @@ const TableTennisGame = {
         }
     },
 
-    predictBallAtZ(targetZ) {
+    predictBallInfo(targetZ) {
         const p = this.ballPos.clone();
         const v = this.ballVel.clone();
         let spin = this.ballSpinAccel;
         const step = 0.03;
-        for (let i = 0; i < 70; i++) {
+        let firstBounce = null;
+        let targetHit = null;
+
+        for (let i = 0; i < 80; i++) {
             v.y += (this.gravity + spin) * step;
             p.addScaledVector(v, step);
             if (p.y <= this.tableHeight + this.ballRadius && v.y < 0 && Math.abs(p.x) <= this.tableWidth / 2 && Math.abs(p.z) <= this.tableLength / 2) {
                 p.y = this.tableHeight + this.ballRadius;
+                if (!firstBounce && p.z < 0) {
+                    firstBounce = p.clone();
+                }
                 v.y = Math.abs(v.y) * this.ballBounceScaleY;
                 v.z *= this.ballBounceScaleZ;
                 spin = 0;
             }
-            if (p.z <= targetZ) return p;
+            if (!targetHit && p.z <= targetZ) {
+                targetHit = p.clone();
+            }
+            if (firstBounce && targetHit) break;
         }
-        return null;
+        return { bounce: firstBounce, hit: targetHit };
     },
 
     // バックハンド時の腕・体のひねりアニメーション上書き処理
