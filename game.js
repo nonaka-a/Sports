@@ -97,6 +97,9 @@ const GameCore = {
                     this.cameraBasePos.set(0, 8, 16);
                     this.camera.position.copy(this.cameraBasePos);
                     this.camera.lookAt(0, 0, 0);
+                    if (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.setBGMByLevel === 'function') {
+                        BadmintonAudio.setBGMByLevel(1);
+                    }
                     gameState = 'waiting';
                 },
                 onPauseToggle: (isPaused) => {
@@ -125,6 +128,10 @@ const GameCore = {
                 const activePointBtn = document.querySelector('.point-opt.active');
                 if (activePointBtn) {
                     matchPoint = parseInt(activePointBtn.dataset.point);
+                }
+
+                if (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.setBGMByLevel === 'function') {
+                    BadmintonAudio.setBGMByLevel(npcLevel);
                 }
 
                 this.activeSport = this.selectedSport || 'badminton';

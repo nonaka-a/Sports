@@ -3,6 +3,8 @@ const BadmintonAudio = {
     smashSounds: [],
     cheerSounds: [],
     bgm: null,
+    bgmTracks: {},
+    currentBgmKey: 'default',
     _isMuted: false,
 
     // 既存の UI 側の properties 直接参照を維持しつつ、BGMの再生制御を連動
@@ -40,11 +42,21 @@ const BadmintonAudio = {
             return audio;
         });
 
-        // BGM の初期化 (sounds/BGM.mp3)
-        this.bgm = new Audio('sounds/BGM.mp3');
-        this.bgm.loop = true;
-        this.bgm.preload = 'auto';
-        this.bgm.volume = 0.15; // BGM音量を0.35から0.15に小さく変更
+        // BGM の初期化 (通常: BGM.mp3 / LV.2-3: BGM2.mp3 / LV.MAX: BGM3.mp3)
+        const bgmPaths = {
+            default: 'sounds/BGM.mp3',
+            lv23: 'sounds/BGM2.mp3',
+            lvMax: 'sounds/BGM3.mp3'
+        };
+        Object.keys(bgmPaths).forEach(key => {
+            const track = new Audio(bgmPaths[key]);
+            track.loop = true;
+            track.preload = 'auto';
+            track.volume = 0.15;
+            this.bgmTracks[key] = track;
+        });
+        this.currentBgmKey = 'default';
+        this.bgm = this.bgmTracks.default;
         
         // 初回画面インタラクション時にブラウザのオーディオ制限を解除
         const unlock = () => {
@@ -83,6 +95,35 @@ const BadmintonAudio = {
             clone.play().catch(e => console.warn("Audio play error:", e));
         } catch (err) {
             console.warn("Audio error:", err);
+        }
+    },
+
+    setBGMByLevel(level) {
+        let nextKey = 'default';
+        if (level === 4) {
+            nextKey = 'lvMax';
+        } else if (level === 2 || level === 3) {
+            nextKey = 'lv23';
+        }
+
+        if (this.currentBgmKey === nextKey && this.bgm) {
+            if (!this.isMuted && this.bgm.paused) {
+                this.bgm.play().catch(e => console.warn("BGM play error:", e));
+            }
+            return;
+        }
+
+        if (this.bgm) {
+            this.bgm.pause();
+            this.bgm.currentTime = 0;
+        }
+
+        this.currentBgmKey = nextKey;
+        this.bgm = this.bgmTracks[nextKey] || this.bgmTracks.default;
+
+        if (!this.isMuted && this.bgm) {
+            this.bgm.currentTime = 0;
+            this.bgm.play().catch(e => console.warn("BGM switch play error:", e));
         }
     },
 

@@ -21,12 +21,12 @@ const TableTennisGame = {
     playerZMax: 5.5,
     npcZMin: -5.5,
     npcZMax: -3.10,
-    hitRadius: 1.78,
-    normalReachX: 0.95,
-    maxReachX: 1.78,
+    hitRadius: 1.25,
+    normalReachX: 0.78,
+    maxReachX: 1.25,
     reachFrontZ: 1.25,
     reachBackZ: 0.30,
-    middleThresholdX: 0.18,
+    middleThresholdX: 0.12,
     characterScale: 1.35,
 
     // 物理・ボール状態
@@ -47,6 +47,19 @@ const TableTennisGame = {
     playerCanHit: true,
     npcCanHit: false,
     npcReactionTimer: 0,
+
+    // サーブ・トス管理用
+    servePhase: 'idle',
+    serveTossVelY: 0,
+    serveArmTime: 0,
+    serveAutoFired: false,
+    npcTossDelayTimer: 0,
+    serveDestX: 0,
+    serveDestZ: -1.5,
+    serveFlightDuration: 0.50,
+    serveFlightSpin: 0,
+    serveNextBounceY: 0.82,
+    serveNextBounceZ: 0.97,
 
     // アニメーション・バックハンド・飛びつき・カメラ用
     playerSwingTime: -1,
@@ -566,26 +579,28 @@ const TableTennisGame = {
         this.isServeFirstBounce = false;
         this.netFault = false;
         this.npcReactionTimer = 0;
+        this.servePhase = 'idle';
+        this.serveTossVelY = 0;
+        this.serveArmTime = 0;
+        this.serveAutoFired = false;
+        this.npcTossDelayTimer = 0;
+        this.resetTossArm(this.playerGroup);
+        this.resetTossArm(this.npcGroup);
 
         if (nextServer === 'player') {
             gameState = 'serve-player';
             this.lastHitter = 'player';
             this.playerCanHit = true;
             this.npcCanHit = false;
-            this.ballPos.set(this.playerGroup.position.x + 0.35, 1.48, this.playerGroup.position.z - 0.45);
+            this.ballPos.set(this.playerGroup.position.x - 0.34, 1.18, this.playerGroup.position.z - 0.40);
             this.ballVel.set(0, 0, 0);
         } else {
             gameState = 'serve-npc';
             this.lastHitter = 'npc';
             this.playerCanHit = false;
             this.npcCanHit = true;
-            this.ballPos.set(this.npcGroup.position.x - 0.35, 1.48, this.npcGroup.position.z + 0.45);
+            this.ballPos.set(this.npcGroup.position.x + 0.34, 1.18, this.npcGroup.position.z + 0.40);
             this.ballVel.set(0, 0, 0);
-            setTimeout(() => {
-                if (gameState === 'serve-npc' && this.core.activeSport === 'tabletennis') {
-                    this.serveBall('npc');
-                }
-            }, 1150);
         }
     },
 
@@ -609,40 +624,106 @@ const TableTennisGame = {
         return new THREE.Vector3(vx, vy, vz);
     },
 
-    serveBall(server) {
-        if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-        this.trailIsSmash = false;
+    resetTossArm(group) {
+        const bodyM = group ? group.getObjectByName("bodyMesh") : null;
+        const visualRoot = bodyM ? bodyM.getObjectByName("visualRoot") : null;
+        const leftArm = visualRoot ? visualRoot.getObjectByName("leftArm") : null;
+        if (leftArm) {
+            leftArm.rotation.set(0, 0, 0);
+        }
+    },
+
+    updateTossArm(group, mode, dt) {
+        const bodyM = group ? group.getObjectByName("bodyMesh") : null;
+        const visualRoot = bodyM ? bodyM.getObjectByName("visualRoot") : null;
+        const leftArm = visualRoot ? visualRoot.getObjectByName("leftArm") : null;
+        if (!leftArm) return;
+        let targetRotX = 0;
+        if (mode === 'hold') targetRotX = -1.05;
+        else if (mode === 'toss') targetRotX = -2.45;
+        leftArm.rotation.x += (targetRotX - leftArm.rotation.x) * 16 * dt;
+    },
+
+    serveBall(server, servePower = 30) {
+        const isLongServe = (servePower >= 50);
+        const pRatio = isLongServe ? Math.max(0, Math.min(1, (servePower - 50) / 50)) : 0;
+
+        if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(isLongServe);
+        this.trailIsSmash = isLongServe;
         this.ballSpinAccel = 0;
         this.ballBounceScaleY = 0.82;
         this.ballBounceScaleZ = 0.97;
         this.netFault = false;
         this.receiverBounces = 0;
         this.isServeFirstBounce = true;
+        this.servePhase = 'idle';
         this.lastHitter = server;
         this.npcReactionTimer = 0;
-        this.core.spawnHitEffect(this.ballPos, 'lob');
+        this.core.spawnHitEffect(this.ballPos, isLongServe ? 'smash' : 'lob');
 
         const targetY = this.tableHeight + this.ballRadius;
+
         if (server === 'player') {
             this.playerHitType = 'fore';
             this.playerSwingTime = 0;
-            const firstBounceTarget = new THREE.Vector3(
-                (Math.random() - 0.5) * 0.6,
-                targetY,
-                1.55
-            );
-            this.ballVel.copy(this.computeBallVelocity(this.ballPos, firstBounceTarget, 0.32, 0));
+
+            // 十字キーで左右方向を打ち分け（無入力時は中央寄り）
+            const aimDir = keys.a ? -1 : (keys.d ? 1 : 0);
+            const firstX = aimDir !== 0
+                ? aimDir * (0.35 + (isLongServe ? 0.25 : 0.15))
+                : this.playerGroup.position.x * 0.35 + (Math.random() - 0.5) * 0.25;
+
+            if (isLongServe) {
+                // 長めチャージ：自陣奥バウンドから相手エンドライン付近へ伸びるロングサーブ
+                const firstZ = 2.10 + pRatio * 0.25;
+                this.serveDestX = aimDir !== 0 ? aimDir * (1.15 + pRatio * 0.32) : (Math.random() - 0.5) * 0.45;
+                this.serveDestZ = -(2.15 + pRatio * 0.42);
+                this.serveFlightDuration = 0.42 - pRatio * 0.05;
+                this.serveFlightSpin = -6.0 - pRatio * 4.0;
+                this.serveNextBounceY = 0.72;
+                this.serveNextBounceZ = 1.10 + pRatio * 0.08;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.22, 0));
+            } else {
+                // 少なめチャージ：少し距離を出しつつエンドライン際で収まるショートサーブ
+                const firstZ = 1.15 + Math.random() * 0.15;
+                this.serveDestX = aimDir !== 0 ? aimDir * 1.05 : (Math.random() - 0.5) * 0.35;
+                this.serveDestZ = -(1.05 + Math.random() * 0.18);
+                this.serveFlightDuration = 0.56;
+                this.serveFlightSpin = 0;
+                this.serveNextBounceY = 0.84;
+                this.serveNextBounceZ = 0.88;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.25, 0));
+            }
+
             this.playerCanHit = false;
             this.npcCanHit = false;
         } else {
             this.npcHitType = 'fore';
             this.npcSwingTime = 0;
-            const firstBounceTarget = new THREE.Vector3(
-                (Math.random() - 0.5) * 0.6,
-                targetY,
-                -1.55
-            );
-            this.ballVel.copy(this.computeBallVelocity(this.ballPos, firstBounceTarget, 0.32, 0));
+
+            const aimDir = npcLevel >= 3 ? (Math.random() > 0.5 ? 1 : -1) : 0;
+            const firstX = aimDir !== 0 ? aimDir * 0.45 : (Math.random() - 0.5) * 0.4;
+
+            if (isLongServe) {
+                const firstZ = -(2.10 + pRatio * 0.25);
+                this.serveDestX = aimDir !== 0 ? aimDir * (1.10 + pRatio * 0.25) : (Math.random() - 0.5) * 0.6;
+                this.serveDestZ = 2.10 + pRatio * 0.35;
+                this.serveFlightDuration = 0.44 - pRatio * 0.04;
+                this.serveFlightSpin = -6.0 - pRatio * 3.0;
+                this.serveNextBounceY = 0.74;
+                this.serveNextBounceZ = 1.08;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.23, 0));
+            } else {
+                const firstZ = -(1.15 + Math.random() * 0.15);
+                this.serveDestX = aimDir !== 0 ? aimDir * 0.95 : (Math.random() - 0.5) * 0.5;
+                this.serveDestZ = 1.05 + Math.random() * 0.18;
+                this.serveFlightDuration = 0.56;
+                this.serveFlightSpin = 0;
+                this.serveNextBounceY = 0.84;
+                this.serveNextBounceZ = 0.88;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.25, 0));
+            }
+
             this.playerCanHit = true;
             this.npcCanHit = false;
         }
@@ -676,7 +757,9 @@ const TableTennisGame = {
 
     stopCharging() {
         if (gameState === 'serve-player') {
-            this.serveBall('player');
+            this.serveBall('player', power);
+        } else if (this.serveAutoFired) {
+            this.serveAutoFired = false;
         } else if (gameState === 'rally' && this.playerCanHit && this.receiverBounces === 1) {
             const reach = this.getReachInfo(this.playerGroup.position, this.ballPos, true);
             if (reach.inRange && this.ballPos.z > 0.2) {
@@ -941,7 +1024,7 @@ const TableTennisGame = {
 
         // ワンバウンド後に範囲内へ入ったら打ち返す
         if (this.npcCanHit && this.receiverBounces === 1 && this.ballPos.z < -0.2) {
-            const npcMaxX = npcLevel >= 3 ? this.maxReachX * 0.85 : this.maxReachX * 0.78;
+            const npcMaxX = npcLevel >= 3 ? this.maxReachX * 0.96 : this.maxReachX * 0.88;
             const reach = this.getReachInfo(this.npcGroup.position, this.ballPos, false, npcMaxX);
             if (reach.inRange) {
                 this.hitBall('npc', 70, reach);
@@ -1085,11 +1168,12 @@ const TableTennisGame = {
     },
 
     update(dt) {
-        // プレイヤー移動（飛びつきジャンプ中は横ダイブ移動、着地後は戻り速度低下）
+        // プレイヤー移動（飛びつきジャンプ中・サーブトス中は移動をロックし、トス中は十字キーを方向指定に使用）
+        const isPlayerTossing = (gameState === 'serve-player' && this.servePhase === 'toss');
         if (this.playerDiveTime >= 0) {
             this.playerGroup.position.x += this.playerDiveDir * 2.6 * dt;
             this.playerGroup.position.x = Math.max(-this.limitX, Math.min(this.limitX, this.playerGroup.position.x));
-        } else {
+        } else if (!isPlayerTossing) {
             let moveSpeed = this.playerSpeed;
             if (this.playerRecoveryTime > 0) moveSpeed *= 0.30;
             if (isCharging) moveSpeed *= 0.6;
@@ -1109,14 +1193,75 @@ const TableTennisGame = {
             }
         }
 
-        // サーブ構え中はボールをプレイヤー／NPCのラケット横に追従
+        // サーブ構え＆トス処理
         if (gameState === 'serve-player') {
-            this.ballPos.set(this.playerGroup.position.x + 0.35, 1.48, this.playerGroup.position.z - 0.45);
-            this.ballVel.set(0, 0, 0);
+            if (this.servePhase !== 'toss') {
+                this.servePhase = 'idle';
+                this.ballPos.set(this.playerGroup.position.x - 0.34, 1.18, this.playerGroup.position.z - 0.40);
+                this.ballVel.set(0, 0, 0);
+                if (isCharging) {
+                    // チャージ開始と同時にボールを高くトスアップ
+                    this.servePhase = 'toss';
+                    this.serveTossVelY = 5.4;
+                    this.serveArmTime = 0.35;
+                    this.serveAutoFired = false;
+                    this.core.spawnRing(this.ballPos, 0xffffff, 0.15, 0.65, 0.22, false, 0.6);
+                }
+            } else {
+                this.serveTossVelY += this.gravity * dt;
+                this.ballPos.y += this.serveTossVelY * dt;
+                // 左手前からラケット側打点へ寄せる
+                const targetBallX = this.playerGroup.position.x + 0.14;
+                this.ballPos.x += (targetBallX - this.ballPos.x) * 3.5 * dt;
+                this.ballPos.z = this.playerGroup.position.z - 0.40;
+
+                if (this.serveTossVelY < 0 && this.ballPos.y <= 1.25) {
+                    // トスが打点まで落ちてきたら自動サーブ（最大ためロング）
+                    this.serveBall('player', power);
+                    this.serveAutoFired = true;
+                    isCharging = false;
+                    power = 0;
+                    if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+                }
+            }
         } else if (gameState === 'serve-npc') {
-            this.ballPos.set(this.npcGroup.position.x - 0.35, 1.48, this.npcGroup.position.z + 0.45);
-            this.ballVel.set(0, 0, 0);
+            if (this.servePhase !== 'toss') {
+                this.servePhase = 'idle';
+                this.ballPos.set(this.npcGroup.position.x + 0.34, 1.18, this.npcGroup.position.z + 0.40);
+                this.ballVel.set(0, 0, 0);
+                this.npcTossDelayTimer += dt;
+                if (this.npcTossDelayTimer >= 0.55) {
+                    this.servePhase = 'toss';
+                    this.serveTossVelY = 5.3;
+                    this.serveArmTime = 0.35;
+                    this.core.spawnRing(this.ballPos, 0xffffff, 0.15, 0.65, 0.22, false, 0.6);
+                }
+            } else {
+                this.serveTossVelY += this.gravity * dt;
+                this.ballPos.y += this.serveTossVelY * dt;
+                const targetBallX = this.npcGroup.position.x - 0.14;
+                this.ballPos.x += (targetBallX - this.ballPos.x) * 3.5 * dt;
+                this.ballPos.z = this.npcGroup.position.z + 0.40;
+
+                if (this.serveTossVelY < 0 && this.ballPos.y <= 1.35) {
+                    const npcServePower = (npcLevel >= 3 && Math.random() < 0.55) ? (60 + Math.random() * 35) : 30;
+                    this.serveBall('npc', npcServePower);
+                }
+            }
         }
+
+        // トス腕アニメーション更新
+        if (this.serveArmTime > 0) {
+            this.serveArmTime = Math.max(0, this.serveArmTime - dt);
+        }
+        const playerArmMode = gameState === 'serve-player'
+            ? (this.serveArmTime > 0 ? 'toss' : (this.servePhase === 'idle' ? 'hold' : 'none'))
+            : 'none';
+        const npcArmMode = gameState === 'serve-npc'
+            ? (this.serveArmTime > 0 ? 'toss' : (this.servePhase === 'idle' ? 'hold' : 'none'))
+            : 'none';
+        this.updateTossArm(this.playerGroup, playerArmMode, dt);
+        this.updateTossArm(this.npcGroup, npcArmMode, dt);
 
         // チャージ更新＆自動ヒット（ワンバウンド後）
         if (isCharging) {
@@ -1186,9 +1331,15 @@ const TableTennisGame = {
                     const onServerHalf = isPlayerServe ? (this.ballPos.z > 0) : (this.ballPos.z < 0);
                     if (onServerHalf) {
                         this.isServeFirstBounce = false;
-                        const destZ = isPlayerServe ? (-1.5 - Math.random() * 0.6) : (1.5 + Math.random() * 0.6);
-                        const destX = (Math.random() - 0.5) * 1.3;
-                        this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(destX, tableSurfaceY, destZ), 0.52, 0));
+                        this.ballSpinAccel = this.serveFlightSpin;
+                        this.ballBounceScaleY = this.serveNextBounceY;
+                        this.ballBounceScaleZ = this.serveNextBounceZ;
+                        this.ballVel.copy(this.computeBallVelocity(
+                            this.ballPos,
+                            new THREE.Vector3(this.serveDestX, tableSurfaceY, this.serveDestZ),
+                            this.serveFlightDuration,
+                            this.serveFlightSpin
+                        ));
                         if (!isPlayerServe) this.playerCanHit = true;
                         else this.npcCanHit = true;
                     }
