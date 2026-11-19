@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
-    <title>3D Badminton Game</title>
+    <title>GO!GO! SPORTS - Table Tennis & Badminton</title>
     <link rel="stylesheet" href="style.css">
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -37,16 +37,16 @@
             <div class="logo-subline"></div>
         </div>
         
-        <!-- 初期：競技選択ボタン -->
+        <!-- 初期：競技選択ボタン（卓球メイン） -->
         <div id="title-main-zone">
             <div class="sport-btn-group">
-                <button id="play-badminton-btn" class="start-btn play-btn sport-choice-btn">
-                    <span class="sport-sub-tag">BADMINTON</span>
-                    <span class="sport-main-txt">▶ バドミントン</span>
-                </button>
-                <button id="play-tabletennis-btn" class="start-btn play-tt-btn sport-choice-btn">
+                <button id="play-tabletennis-btn" class="start-btn play-btn sport-choice-btn">
                     <span class="sport-sub-tag">TABLE TENNIS</span>
                     <span class="sport-main-txt">▶ 卓球</span>
+                </button>
+                <button id="play-badminton-btn" class="start-btn play-tt-btn sport-choice-btn">
+                    <span class="sport-sub-tag">BADMINTON</span>
+                    <span class="sport-main-txt">▶ バドミントン</span>
                 </button>
             </div>
             <div class="controls-guide">
@@ -182,6 +182,7 @@
     <script src="environment.js"></script>
     <script src="player.js"></script>
     <script src="ui.js"></script>
+    <script src="tt_character.js"></script>
     <script src="tabletennis.js"></script>
     <script src="game.js"></script>
 </body>

@@ -17,17 +17,17 @@ const TableTennisGame = {
     playerSpeed: 4.2,
     npcBaseSpeed: 3.3,
     limitX: 2.75,
-    playerZMin: 3.10,
+    playerZMin: 3.38,
     playerZMax: 5.5,
     npcZMin: -5.5,
-    npcZMax: -3.10,
+    npcZMax: -3.38,
     hitRadius: 1.25,
     normalReachX: 0.78,
     maxReachX: 1.25,
-    reachFrontZ: 1.25,
+    reachFrontZ: 1.53,
     reachBackZ: 0.30,
     middleThresholdX: 0.12,
-    characterScale: 1.35,
+    characterScale: 1.62,
 
     // 物理・ボール状態
     ballPos: new THREE.Vector3(0, 1.35, 3.2),
@@ -109,6 +109,23 @@ const TableTennisGame = {
         if (!visible) {
             this.resetTrail();
         }
+    },
+
+    resetTitlePreview() {
+        if (this.playerGroup) {
+            this.playerGroup.position.set(0, 0, 3.8);
+            this.prevPlayerPos.copy(this.playerGroup.position);
+            TableTennisCharacter.resetPose(this.playerGroup.getObjectByName("bodyMesh"));
+        }
+        if (this.npcGroup) {
+            this.npcGroup.position.set(0, 0, -3.8);
+            this.prevNpcPos.copy(this.npcGroup.position);
+            TableTennisCharacter.resetPose(this.npcGroup.getObjectByName("bodyMesh"));
+        }
+        this.ballPos.set(-0.34, 1.18, 3.40);
+        if (this.ballGroup) this.ballGroup.position.copy(this.ballPos);
+        if (this.ballShadow) this.ballShadow.position.set(this.ballPos.x, 0.025, this.ballPos.z);
+        this.resetTrail();
     },
 
     // 卓球専用の軽い「ポンッ」というバウンド音を生成（ミュート連動）
@@ -331,9 +348,7 @@ const TableTennisGame = {
     },
 
     buildCharacters() {
-        const dummyTex = this.core.createStringBedTexture('#ffffff');
-
-        const shadowGeo = new THREE.RingGeometry(0, 0.56, 28);
+        const shadowGeo = new THREE.RingGeometry(0, 0.62, 28);
         const shadowMat = new THREE.MeshBasicMaterial({
             color: 0x000000,
             transparent: true,
@@ -341,20 +356,18 @@ const TableTennisGame = {
             side: THREE.DoubleSide
         });
 
-        // プレイヤーキャラ（サイズ拡大＋接地位置補正）
+        // プレイヤーキャラ（卓球専用3頭身関節リグモデル）
         this.playerGroup = new THREE.Group();
-        const playerBody = this.core.createSportsCharacter({
+        const playerBody = TableTennisCharacter.createCharacter({
             primaryColor: 0xff3b30,
             accentColor: 0xffd700,
+            rubberColor: 0xd92626,
             shortsColor: 0x1c1c1e,
             hairColor: 0x2b1d14,
             faceBack: true,
-            hasCap: true,
-            stringTex: dummyTex
+            hasCap: true
         });
         playerBody.scale.setScalar(this.characterScale);
-        playerBody.position.y = 0.5 * this.characterScale;
-        this.swapToTableTennisRacket(playerBody, 0xd92626, 0xffd700);
         this.playerGroup.add(playerBody);
 
         const playerShadow = new THREE.Mesh(shadowGeo, shadowMat);
@@ -362,41 +375,21 @@ const TableTennisGame = {
         playerShadow.position.y = 0.025;
         this.playerGroup.add(playerShadow);
 
-        // 足元ヒット可能範囲リング
-        const rangeGeo = new THREE.RingGeometry(this.hitRadius - 0.07, this.hitRadius, 48);
-        const rangeMat = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.42,
-            side: THREE.DoubleSide,
-            polygonOffset: true,
-            polygonOffsetFactor: -1.0,
-            polygonOffsetUnits: -1.0
-        });
-        const rangeMesh = new THREE.Mesh(rangeGeo, rangeMat);
-        rangeMesh.name = "ttRangeRing";
-        rangeMesh.rotation.x = -Math.PI / 2;
-        rangeMesh.position.y = 0.028;
-        rangeMesh.visible = false;
-        this.playerGroup.add(rangeMesh);
-
         this.playerGroup.position.set(0, 0, 3.8);
         this.rootGroup.add(this.playerGroup);
 
-        // NPCキャラ（サイズ拡大＋接地位置補正）
+        // NPCキャラ（卓球専用3頭身関節リグモデル）
         this.npcGroup = new THREE.Group();
-        const npcBody = this.core.createSportsCharacter({
+        const npcBody = TableTennisCharacter.createCharacter({
             primaryColor: 0x007aff,
             accentColor: 0x00d4ff,
+            rubberColor: 0xd92626,
             shortsColor: 0x182235,
             hairColor: 0x1f242d,
             faceBack: false,
-            hasCap: false,
-            stringTex: dummyTex
+            hasCap: false
         });
         npcBody.scale.setScalar(this.characterScale);
-        npcBody.position.y = 0.5 * this.characterScale;
-        this.swapToTableTennisRacket(npcBody, 0xd92626, 0x00d4ff);
         this.npcGroup.add(npcBody);
 
         const npcShadow = playerShadow.clone();
@@ -564,10 +557,8 @@ const TableTennisGame = {
         this.npcDiveTime = -1;
         this.npcDiveDir = 0;
         this.npcRecoveryTime = 0;
-        this.resetDivePose(this.playerGroup);
-        this.resetDivePose(this.npcGroup);
-        this.resetVisualYaw(this.playerGroup, true);
-        this.resetVisualYaw(this.npcGroup, false);
+        TableTennisCharacter.resetPose(this.playerGroup.getObjectByName("bodyMesh"));
+        TableTennisCharacter.resetPose(this.npcGroup.getObjectByName("bodyMesh"));
         this.resetTrail();
 
         power = 0;
@@ -588,8 +579,7 @@ const TableTennisGame = {
         this.serveArmTime = 0;
         this.serveAutoFired = false;
         this.npcTossDelayTimer = 0;
-        this.resetTossArm(this.playerGroup);
-        this.resetTossArm(this.npcGroup);
+        // トス腕初期化は TableTennisCharacter.resetPose に統合
 
         if (nextServer === 'player') {
             gameState = 'serve-player';
@@ -799,7 +789,7 @@ const TableTennisGame = {
             const relX = this.ballPos.x - this.playerGroup.position.x;
             const isMiddle = !reach.isDive && Math.abs(relX) <= this.middleThresholdX;
 
-            this.playerHitType = relX < -this.middleThresholdX ? 'back' : 'fore';
+            this.playerHitType = isStop ? 'stop' : (relX < -this.middleThresholdX ? 'back' : 'fore');
             this.playerSwingTime = 0;
             this.playerCanHit = false;
             this.npcCanHit = true;
@@ -1278,7 +1268,7 @@ const TableTennisGame = {
             }
         }
 
-        // トス腕アニメーション更新
+        // トス腕アニメーション用タイマー更新
         if (this.serveArmTime > 0) {
             this.serveArmTime = Math.max(0, this.serveArmTime - dt);
         }
@@ -1288,8 +1278,6 @@ const TableTennisGame = {
         const npcArmMode = gameState === 'serve-npc'
             ? (this.serveArmTime > 0 ? 'toss' : (this.servePhase === 'idle' ? 'hold' : 'none'))
             : 'none';
-        this.updateTossArm(this.playerGroup, playerArmMode, dt);
-        this.updateTossArm(this.npcGroup, npcArmMode, dt);
 
         // チャージ更新＆自動ヒット（ワンバウンド後）
         if (isCharging) {
@@ -1419,40 +1407,76 @@ const TableTennisGame = {
         this.updateTrail(gameState === 'rally');
         this.core.updateVFX(dt);
 
-        // 飛びつきジャンプ・姿勢更新
-        this.updateDiveAnimation(this.playerGroup, 'playerDiveTime', this.playerDiveDir, 'playerRecoveryTime', dt);
-        this.updateDiveAnimation(this.npcGroup, 'npcDiveTime', this.npcDiveDir, 'npcRecoveryTime', dt);
-
-        // キャラクターアニメーション更新（バックハンド時は専用モーションで上書き）
-        this.playerSwingTime = this.core.updateCharacterAnimation(
-            this.playerGroup,
-            this.prevPlayerPos,
-            'playerStepPhase',
-            this.playerDiveTime >= 0,
-            isCharging,
-            this.playerSwingTime,
-            dt
-        );
-        if (this.playerSwingTime >= 0 && this.playerHitType === 'back') {
-            this.applyBackhandSwingAnimation(this.playerGroup, true, this.playerSwingTime, dt);
-        } else {
-            this.applyBackhandSwingAnimation(this.playerGroup, true, -1, dt);
+        // 飛びつき・リカバリータイマー更新
+        if (this.playerDiveTime >= 0) {
+            this.playerDiveTime += dt;
+            if (this.playerDiveTime >= this.diveDuration) this.playerDiveTime = -1;
+        } else if (this.playerRecoveryTime > 0) {
+            this.playerRecoveryTime = Math.max(0, this.playerRecoveryTime - dt);
         }
 
-        this.npcSwingTime = this.core.updateCharacterAnimation(
-            this.npcGroup,
-            this.prevNpcPos,
-            'npcStepPhase',
-            this.npcDiveTime >= 0,
-            false,
-            this.npcSwingTime,
+        if (this.npcDiveTime >= 0) {
+            this.npcDiveTime += dt;
+            if (this.npcDiveTime >= this.diveDuration) this.npcDiveTime = -1;
+        } else if (this.npcRecoveryTime > 0) {
+            this.npcRecoveryTime = Math.max(0, this.npcRecoveryTime - dt);
+        }
+
+        // 卓球専用関節アニメーション更新
+        const invDt = dt > 0.0001 ? 1 / dt : 0;
+        const pVx = (this.playerGroup.position.x - this.prevPlayerPos.x) * invDt;
+        const pVz = (this.playerGroup.position.z - this.prevPlayerPos.z) * invDt;
+        this.prevPlayerPos.copy(this.playerGroup.position);
+
+        const pAnimRes = TableTennisCharacter.updateAnimation(
+            this.playerGroup.getObjectByName("bodyMesh"),
+            {
+                isPlayer: true,
+                vx: pVx,
+                vz: pVz,
+                isCharging,
+                chargeRatio: Math.min(1, power / MAX_POWER),
+                swingTime: this.playerSwingTime,
+                stepPhase: this.playerStepPhase,
+                hitType: this.playerHitType,
+                armMode: playerArmMode,
+                diveTime: this.playerDiveTime,
+                diveDuration: this.diveDuration,
+                diveDir: this.playerDiveDir,
+                recoveryTime: this.playerRecoveryTime,
+                idleTime: this.core.idleTime
+            },
             dt
         );
-        if (this.npcSwingTime >= 0 && this.npcHitType === 'back') {
-            this.applyBackhandSwingAnimation(this.npcGroup, false, this.npcSwingTime, dt);
-        } else {
-            this.applyBackhandSwingAnimation(this.npcGroup, false, -1, dt);
-        }
+        this.playerSwingTime = pAnimRes.swingTime;
+        this.playerStepPhase = pAnimRes.stepPhase;
+
+        const nVx = (this.npcGroup.position.x - this.prevNpcPos.x) * invDt;
+        const nVz = (this.npcGroup.position.z - this.prevNpcPos.z) * invDt;
+        this.prevNpcPos.copy(this.npcGroup.position);
+
+        const nAnimRes = TableTennisCharacter.updateAnimation(
+            this.npcGroup.getObjectByName("bodyMesh"),
+            {
+                isPlayer: false,
+                vx: nVx,
+                vz: nVz,
+                isCharging: false,
+                chargeRatio: 0,
+                swingTime: this.npcSwingTime,
+                stepPhase: this.npcStepPhase,
+                hitType: this.npcHitType,
+                armMode: npcArmMode,
+                diveTime: this.npcDiveTime,
+                diveDuration: this.diveDuration,
+                diveDir: this.npcDiveDir,
+                recoveryTime: this.npcRecoveryTime,
+                idleTime: this.core.idleTime
+            },
+            dt
+        );
+        this.npcSwingTime = nAnimRes.swingTime;
+        this.npcStepPhase = nAnimRes.stepPhase;
 
         // カメラ追従＆シェイク
         this.cameraBasePos.x += (this.playerGroup.position.x * 0.48 - this.cameraBasePos.x) * 4.5 * dt;

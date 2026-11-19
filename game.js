@@ -13,8 +13,8 @@ let npcLevel = 1;
 let matchPoint = 21;
 
 const GameCore = {
-    selectedSport: 'badminton',
-    activeSport: 'badminton',
+    selectedSport: 'tabletennis',
+    activeSport: 'tabletennis',
     courtWidth: 12, courtLength: 20, netHeight: 2.2, hitRadius: 2.0,
     scene: null, camera: null, renderer: null, clock: null,
     playerGroup: null, npcGroup: null, shuttleGroup: null, shuttleShadow: null,
@@ -67,16 +67,23 @@ const GameCore = {
             EnvironmentManager.buildCourt(this.scene, courtType, {
                 courtWidth: this.courtWidth,
                 courtLength: this.courtLength,
-                netHeight: this.netHeight
+                netHeight: this.netHeight,
+                isTableTennis: true
             });
         }
 
         this.buildCharacters();
         this.buildShuttle();
         this.initVFX();
+        this.setBadmintonVisibility(false);
 
         if (typeof TableTennisGame !== 'undefined') {
             TableTennisGame.init(this);
+            TableTennisGame.setVisible(true);
+            TableTennisGame.resetTitlePreview();
+            this.cameraBasePos.set(0, 4.4, 8.6);
+            this.camera.position.copy(this.cameraBasePos);
+            this.camera.lookAt(0, 1.05, 0);
         }
 
         if (typeof UIManager !== 'undefined') {
@@ -89,14 +96,23 @@ const GameCore = {
                     UIManager.hideResult();
                     UIManager.showStartScreen(true);
                     this.resetShuttleTrail();
-                    if (typeof TableTennisGame !== 'undefined') {
-                        TableTennisGame.setVisible(false);
+                    this.setBadmintonVisibility(false);
+                    if (typeof EnvironmentManager !== 'undefined') {
+                        EnvironmentManager.buildCourt(this.scene, courtType, {
+                            courtWidth: this.courtWidth,
+                            courtLength: this.courtLength,
+                            netHeight: this.netHeight,
+                            isTableTennis: true
+                        });
                     }
-                    this.setBadmintonVisibility(true);
-                    this.activeSport = 'badminton';
-                    this.cameraBasePos.set(0, 8, 16);
+                    if (typeof TableTennisGame !== 'undefined') {
+                        TableTennisGame.setVisible(true);
+                        TableTennisGame.resetTitlePreview();
+                    }
+                    this.activeSport = 'tabletennis';
+                    this.cameraBasePos.set(0, 4.4, 8.6);
                     this.camera.position.copy(this.cameraBasePos);
-                    this.camera.lookAt(0, 0, 0);
+                    this.camera.lookAt(0, 1.05, 0);
                     if (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.setBGMByLevel === 'function') {
                         BadmintonAudio.setBGMByLevel(1);
                     }
