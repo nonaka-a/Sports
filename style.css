@@ -47,10 +47,8 @@ html, body {
     padding: 9px;
     box-sizing: border-box;
     border-radius: 12px;
-    background: rgba(16, 22, 32, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(16, 22, 32, 0.84);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
     cursor: pointer;
     pointer-events: auto;
@@ -532,7 +530,6 @@ html, body {
     overflow: hidden;
     pointer-events: auto;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
 }
 
 .score-box {
@@ -693,11 +690,10 @@ html, body {
     flex-direction: column;
     gap: 4px;
     width: 136px;
-    background: rgba(12, 16, 24, 0.75);
+    background: rgba(12, 16, 24, 0.86);
     padding: 6px 8px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.16);
-    backdrop-filter: blur(6px);
 }
 
 .power-label-row {

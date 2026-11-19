@@ -82,9 +82,27 @@ const TableTennisGame = {
     npcStepPhase: 0,
     cameraBasePos: new THREE.Vector3(0, 4.4, 8.6),
     trailPoints: [],
+    trailPointPool: [],
     trailMesh: null,
     trailIsSmash: false,
     trailMaxPoints: 14,
+
+    // GC抑制用再利用オブジェクト
+    _tmpVec3A: new THREE.Vector3(),
+    _tmpVec3B: new THREE.Vector3(),
+    _tmpVec3C: new THREE.Vector3(),
+    _tmpVec3D: new THREE.Vector3(),
+    _tmpPrevBallPos: new THREE.Vector3(),
+    _predPos: new THREE.Vector3(),
+    _predVel: new THREE.Vector3(),
+    _predBounce: new THREE.Vector3(),
+    _predHit: new THREE.Vector3(),
+    _predResult: { bounce: null, hit: null },
+    _animState: {
+        isPlayer: true, vx: 0, vz: 0, isCharging: false, chargeRatio: 0,
+        swingTime: -1, stepPhase: 0, hitType: 'fore', armMode: 'none',
+        diveTime: -1, diveDuration: 0.40, diveDir: 0, recoveryTime: 0, idleTime: 0
+    },
 
     // WebAudio ピンポン音用コンテキスト
     audioCtx: null,
@@ -422,6 +440,10 @@ const TableTennisGame = {
     },
 
     initTrail() {
+        this.trailPointPool = [];
+        for (let i = 0; i < this.trailMaxPoints; i++) {
+            this.trailPointPool.push(new THREE.Vector3());
+        }
         const count = this.trailMaxPoints;
         const positions = new Float32Array(count * 2 * 3);
         const indices = [];
@@ -450,7 +472,9 @@ const TableTennisGame = {
     },
 
     resetTrail() {
-        this.trailPoints = [];
+        while (this.trailPoints.length > 0) {
+            this.trailPointPool.push(this.trailPoints.pop());
+        }
         this.trailIsSmash = false;
         if (this.trailMesh) this.trailMesh.visible = false;
     },
@@ -458,15 +482,22 @@ const TableTennisGame = {
     updateTrail(active) {
         if (!this.trailMesh) return;
         if (!active) {
-            this.trailPoints = [];
+            while (this.trailPoints.length > 0) {
+                this.trailPointPool.push(this.trailPoints.pop());
+            }
             this.trailMesh.visible = false;
             return;
         }
 
-        this.trailPoints.unshift(this.ballPos.clone());
-        if (this.trailPoints.length > this.trailMaxPoints) {
-            this.trailPoints.pop();
+        let ptObj;
+        if (this.trailPoints.length >= this.trailMaxPoints) {
+            ptObj = this.trailPoints.pop();
+        } else {
+            ptObj = this.trailPointPool.pop() || new THREE.Vector3();
         }
+        ptObj.copy(this.ballPos);
+        this.trailPoints.unshift(ptObj);
+
         if (this.trailPoints.length < 2) {
             this.trailMesh.visible = false;
             return;
@@ -481,9 +512,9 @@ const TableTennisGame = {
         const arr = posAttr.array;
 
         const camPos = this.core.camera.position;
-        const dir = new THREE.Vector3();
-        const toCam = new THREE.Vector3();
-        const side = new THREE.Vector3();
+        const dir = this._tmpVec3A;
+        const toCam = this._tmpVec3B;
+        const side = this._tmpVec3C;
 
         for (let i = 0; i < this.trailMaxPoints; i++) {
             const pt = this.trailPoints[Math.min(i, this.trailPoints.length - 1)];
@@ -734,12 +765,8 @@ const TableTennisGame = {
         const absX = Math.abs(dx);
         const maxX = maxReachXOverride !== null ? maxReachXOverride : this.maxReachX;
 
-        // キャラクターの正面方向を正、背面（振り遅れ）を負として前後リーチを判定
         const forwardDist = isPlayer ? (charPos.z - ballPos.z) : (ballPos.z - charPos.z);
-        if (forwardDist < -this.reachBackZ || forwardDist > this.reachFrontZ) {
-            return { inRange: false, isDive: false, dir: 0 };
-        }
-        if (absX > maxX) {
+        if (forwardDist < -this.reachBackZ || forwardDist > this.reachFrontZ || absX > maxX) {
             return { inRange: false, isDive: false, dir: 0 };
         }
 
@@ -1081,31 +1108,35 @@ const TableTennisGame = {
     },
 
     predictBallInfo(targetZ) {
-        const p = this.ballPos.clone();
-        const v = this.ballVel.clone();
+        const p = this._predPos.copy(this.ballPos);
+        const v = this._predVel.copy(this.ballVel);
         let spin = this.ballSpinAccel;
         const step = 0.03;
-        let firstBounce = null;
-        let targetHit = null;
+        let hasBounce = false;
+        let hasHit = false;
 
         for (let i = 0; i < 80; i++) {
             v.y += (this.gravity + spin) * step;
             p.addScaledVector(v, step);
             if (p.y <= this.tableHeight + this.ballRadius && v.y < 0 && Math.abs(p.x) <= this.tableWidth / 2 && Math.abs(p.z) <= this.tableLength / 2) {
                 p.y = this.tableHeight + this.ballRadius;
-                if (!firstBounce && p.z < 0) {
-                    firstBounce = p.clone();
+                if (!hasBounce && p.z < 0) {
+                    this._predBounce.copy(p);
+                    hasBounce = true;
                 }
                 v.y = Math.abs(v.y) * this.ballBounceScaleY;
                 v.z *= this.ballBounceScaleZ;
                 spin = 0;
             }
-            if (!targetHit && p.z <= targetZ) {
-                targetHit = p.clone();
+            if (!hasHit && p.z <= targetZ) {
+                this._predHit.copy(p);
+                hasHit = true;
             }
-            if (firstBounce && targetHit) break;
+            if (hasBounce && hasHit) break;
         }
-        return { bounce: firstBounce, hit: targetHit };
+        this._predResult.bounce = hasBounce ? this._predBounce : null;
+        this._predResult.hit = hasHit ? this._predHit : null;
+        return this._predResult;
     },
 
     // バックハンド時の腕・体のひねりアニメーション上書き処理
@@ -1197,15 +1228,22 @@ const TableTennisGame = {
             if (isCharging) moveSpeed *= 0.6;
 
             let mx = 0, mz = 0;
-            if (keys.w) mz -= 1;
-            if (keys.s) mz += 1;
-            if (keys.a) mx -= 1;
-            if (keys.d) mx += 1;
+            const useJoy = (typeof FloatingJoystick !== 'undefined' && FloatingJoystick.active);
+            if (useJoy) {
+                mx = FloatingJoystick.dir.x;
+                mz = FloatingJoystick.dir.y;
+            } else {
+                if (keys.w) mz -= 1;
+                if (keys.s) mz += 1;
+                if (keys.a) mx -= 1;
+                if (keys.d) mx += 1;
+            }
 
-            if (mx !== 0 || mz !== 0) {
-                const len = Math.hypot(mx, mz);
-                this.playerGroup.position.x += (mx / len) * moveSpeed * dt;
-                this.playerGroup.position.z += (mz / len) * moveSpeed * dt;
+            const mag = Math.hypot(mx, mz);
+            if (mag > 0.001) {
+                const scale = (useJoy && mag <= 1) ? mag : 1;
+                this.playerGroup.position.x += (mx / mag) * moveSpeed * scale * dt;
+                this.playerGroup.position.z += (mz / mag) * moveSpeed * scale * dt;
                 this.playerGroup.position.x = Math.max(-this.limitX, Math.min(this.limitX, this.playerGroup.position.x));
                 this.playerGroup.position.z = Math.max(this.playerZMin, Math.min(this.playerZMax, this.playerGroup.position.z));
             }
@@ -1300,7 +1338,7 @@ const TableTennisGame = {
 
         // ラリー物理更新
         if (gameState === 'rally') {
-            const prevPos = this.ballPos.clone();
+            const prevPos = this._tmpPrevBallPos.copy(this.ballPos);
 
             this.ballVel.y += (this.gravity + this.ballSpinAccel) * dt;
             const sp = this.ballVel.length();
@@ -1428,24 +1466,25 @@ const TableTennisGame = {
         const pVz = (this.playerGroup.position.z - this.prevPlayerPos.z) * invDt;
         this.prevPlayerPos.copy(this.playerGroup.position);
 
+        const st = this._animState;
+        st.isPlayer = true;
+        st.vx = pVx;
+        st.vz = pVz;
+        st.isCharging = isCharging;
+        st.chargeRatio = Math.min(1, power / MAX_POWER);
+        st.swingTime = this.playerSwingTime;
+        st.stepPhase = this.playerStepPhase;
+        st.hitType = this.playerHitType;
+        st.armMode = playerArmMode;
+        st.diveTime = this.playerDiveTime;
+        st.diveDuration = this.diveDuration;
+        st.diveDir = this.playerDiveDir;
+        st.recoveryTime = this.playerRecoveryTime;
+        st.idleTime = this.core.idleTime;
+
         const pAnimRes = TableTennisCharacter.updateAnimation(
             this.playerGroup.getObjectByName("bodyMesh"),
-            {
-                isPlayer: true,
-                vx: pVx,
-                vz: pVz,
-                isCharging,
-                chargeRatio: Math.min(1, power / MAX_POWER),
-                swingTime: this.playerSwingTime,
-                stepPhase: this.playerStepPhase,
-                hitType: this.playerHitType,
-                armMode: playerArmMode,
-                diveTime: this.playerDiveTime,
-                diveDuration: this.diveDuration,
-                diveDir: this.playerDiveDir,
-                recoveryTime: this.playerRecoveryTime,
-                idleTime: this.core.idleTime
-            },
+            st,
             dt
         );
         this.playerSwingTime = pAnimRes.swingTime;
@@ -1455,24 +1494,22 @@ const TableTennisGame = {
         const nVz = (this.npcGroup.position.z - this.prevNpcPos.z) * invDt;
         this.prevNpcPos.copy(this.npcGroup.position);
 
+        st.isPlayer = false;
+        st.vx = nVx;
+        st.vz = nVz;
+        st.isCharging = false;
+        st.chargeRatio = 0;
+        st.swingTime = this.npcSwingTime;
+        st.stepPhase = this.npcStepPhase;
+        st.hitType = this.npcHitType;
+        st.armMode = npcArmMode;
+        st.diveTime = this.npcDiveTime;
+        st.diveDir = this.npcDiveDir;
+        st.recoveryTime = this.npcRecoveryTime;
+
         const nAnimRes = TableTennisCharacter.updateAnimation(
             this.npcGroup.getObjectByName("bodyMesh"),
-            {
-                isPlayer: false,
-                vx: nVx,
-                vz: nVz,
-                isCharging: false,
-                chargeRatio: 0,
-                swingTime: this.npcSwingTime,
-                stepPhase: this.npcStepPhase,
-                hitType: this.npcHitType,
-                armMode: npcArmMode,
-                diveTime: this.npcDiveTime,
-                diveDuration: this.diveDuration,
-                diveDir: this.npcDiveDir,
-                recoveryTime: this.npcRecoveryTime,
-                idleTime: this.core.idleTime
-            },
+            st,
             dt
         );
         this.npcSwingTime = nAnimRes.swingTime;

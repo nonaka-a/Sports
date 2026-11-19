@@ -317,7 +317,8 @@ const TableTennisCharacter = {
             rightLeg,
             leftArm,
             rightArm,
-            basePelvisY: 0.34
+            basePelvisY: 0.34,
+            animResult: { swingTime: -1, stepPhase: 0 }
         };
 
         this.resetPose(bodyMesh);
@@ -566,6 +567,8 @@ const TableTennisCharacter = {
         this.lerpAngle(rig.leftArm.shoulderGroup, lShX, 0, lShZ, factor);
         this.lerpAngle(rig.leftArm.elbowGroup, lElX, 0, lElZ, factor);
 
-        return { swingTime, stepPhase };
+        rig.animResult.swingTime = swingTime;
+        rig.animResult.stepPhase = stepPhase;
+        return rig.animResult;
     }
 };

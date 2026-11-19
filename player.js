@@ -39,15 +39,21 @@ const PlayerManager = {
         if (isCharging || this.isJumping) speed *= 0.5; 
 
         let mx = 0, mz = 0;
-        if (keys.w) mz -= 1;
-        if (keys.s) mz += 1;
-        if (keys.a) mx -= 1;
-        if (keys.d) mx += 1;
-        
-        if (mx !== 0 || mz !== 0) {
-            const len = Math.hypot(mx, mz);
-            playerGroup.position.x += (mx / len) * speed * dt;
-            playerGroup.position.z += (mz / len) * speed * dt;
+        if (joystickActive && joystickDir) {
+            mx = joystickDir.x;
+            mz = joystickDir.y;
+        } else {
+            if (keys.w) mz -= 1;
+            if (keys.s) mz += 1;
+            if (keys.a) mx -= 1;
+            if (keys.d) mx += 1;
+        }
+
+        const mag = Math.hypot(mx, mz);
+        if (mag > 0.001) {
+            const scale = (joystickActive && mag <= 1) ? mag : 1;
+            playerGroup.position.x += (mx / mag) * speed * scale * dt;
+            playerGroup.position.z += (mz / mag) * speed * scale * dt;
             playerGroup.position.x = Math.max(-this.COURT_LIMIT_X, Math.min(this.COURT_LIMIT_X, playerGroup.position.x));
             playerGroup.position.z = Math.max(this.COURT_LIMIT_Z_MIN, Math.min(this.COURT_LIMIT_Z_MAX, playerGroup.position.z));
         }

@@ -1,5 +1,6 @@
 // Global State Variables
 const keys = { w: false, a: false, s: false, d: false, Space: false };
+const keyboardKeys = { w: false, a: false, s: false, d: false };
 let isCharging = false;
 let power = 0;
 const MAX_POWER = 100;
@@ -42,11 +43,23 @@ const GameCore = {
     // VFX システム用
     trailMaxPoints: 16,
     trailPoints: [],
+    trailPointPool: [],
     trailMesh: null,
     trailIsSmash: false,
     ringPool: [],
     sparkPool: [],
     chargeSparkTimer: 0,
+
+    // GC抑制用再利用オブジェクト
+    _tmpVec2A: new THREE.Vector2(),
+    _tmpVec2B: new THREE.Vector2(),
+    _tmpVec3A: new THREE.Vector3(),
+    _tmpVec3B: new THREE.Vector3(),
+    _tmpVec3C: new THREE.Vector3(),
+    _tmpVec3D: new THREE.Vector3(),
+    _tmpPrevShuttlePos: new THREE.Vector3(),
+    _tmpQuat: new THREE.Quaternion(),
+    _downVec: new THREE.Vector3(0, -1, 0),
 
     init() {
         this.clock = new THREE.Clock();
@@ -57,9 +70,9 @@ const GameCore = {
         this.camera.position.copy(this.cameraBasePos);
         this.camera.lookAt(0, 0, 0);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
         this.renderer.shadowMap.enabled = false;
         document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
@@ -96,6 +109,9 @@ const GameCore = {
                     UIManager.hideResult();
                     UIManager.showStartScreen(true);
                     this.resetShuttleTrail();
+                    if (typeof FloatingJoystick !== 'undefined') {
+                        FloatingJoystick.reset();
+                    }
                     this.setBadmintonVisibility(false);
                     if (typeof EnvironmentManager !== 'undefined') {
                         EnvironmentManager.buildCourt(this.scene, courtType, {
@@ -123,6 +139,9 @@ const GameCore = {
                         isCharging = false;
                         power = 0;
                         UIManager.updatePowerBar(0);
+                        if (typeof FloatingJoystick !== 'undefined') {
+                            FloatingJoystick.reset();
+                        }
                     }
                 }
             });
@@ -191,6 +210,11 @@ const GameCore = {
     // VFX（トレイル・リング・スパーク・シェイク）管理
     // -----------------------------------------------------
     initVFX() {
+        this.trailPointPool = [];
+        for (let i = 0; i < this.trailMaxPoints; i++) {
+            this.trailPointPool.push(new THREE.Vector3());
+        }
+
         // 1. シャトル飛行トレイル（固定頂点リボンメッシュ）
         const count = this.trailMaxPoints;
         const positions = new Float32Array(count * 2 * 3);
@@ -269,7 +293,9 @@ const GameCore = {
     },
 
     resetShuttleTrail() {
-        this.trailPoints = [];
+        while (this.trailPoints.length > 0) {
+            this.trailPointPool.push(this.trailPoints.pop());
+        }
         this.trailIsSmash = false;
         if (this.trailMesh) {
             this.trailMesh.visible = false;
@@ -280,15 +306,21 @@ const GameCore = {
         if (!this.trailMesh) return;
 
         if (!active) {
-            this.trailPoints = [];
+            while (this.trailPoints.length > 0) {
+                this.trailPointPool.push(this.trailPoints.pop());
+            }
             this.trailMesh.visible = false;
             return;
         }
 
-        this.trailPoints.unshift(this.shuttlePhys.pos.clone());
-        if (this.trailPoints.length > this.trailMaxPoints) {
-            this.trailPoints.pop();
+        let ptObj;
+        if (this.trailPoints.length >= this.trailMaxPoints) {
+            ptObj = this.trailPoints.pop();
+        } else {
+            ptObj = this.trailPointPool.pop() || new THREE.Vector3();
         }
+        ptObj.copy(this.shuttlePhys.pos);
+        this.trailPoints.unshift(ptObj);
 
         if (this.trailPoints.length < 2) {
             this.trailMesh.visible = false;
@@ -304,9 +336,9 @@ const GameCore = {
         const arr = posAttr.array;
 
         const camPos = this.camera.position;
-        const dir = new THREE.Vector3();
-        const toCam = new THREE.Vector3();
-        const side = new THREE.Vector3();
+        const dir = this._tmpVec3A;
+        const toCam = this._tmpVec3B;
+        const side = this._tmpVec3C;
 
         for (let i = 0; i < this.trailMaxPoints; i++) {
             const pt = this.trailPoints[Math.min(i, this.trailPoints.length - 1)];
@@ -915,21 +947,37 @@ const GameCore = {
         this.scene.add(this.shuttleShadow);
     },
 
+    syncDirectionalKeys() {
+        const joyKeys = (typeof FloatingJoystick !== 'undefined')
+            ? FloatingJoystick.joyKeys
+            : { w: false, a: false, s: false, d: false };
+        keys.w = keyboardKeys.w || joyKeys.w;
+        keys.a = keyboardKeys.a || joyKeys.a;
+        keys.s = keyboardKeys.s || joyKeys.s;
+        keys.d = keyboardKeys.d || joyKeys.d;
+    },
+
     initInputs() {
+        if (typeof FloatingJoystick !== 'undefined') {
+            FloatingJoystick.init({
+                onChange: () => this.syncDirectionalKeys()
+            });
+        }
+
         window.addEventListener('keydown', (e) => {
             if (e.key === ' ' || e.code === 'Space') { keys.Space = true; this.startCharging(); }
-            if (e.code === 'KeyW' || e.key === 'ArrowUp') keys.w = true;
-            if (e.code === 'KeyA' || e.key === 'ArrowLeft') keys.a = true;
-            if (e.code === 'KeyS' || e.key === 'ArrowDown') keys.s = true;
-            if (e.code === 'KeyD' || e.key === 'ArrowRight') keys.d = true;
+            if (e.code === 'KeyW' || e.key === 'ArrowUp') { keyboardKeys.w = true; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyA' || e.key === 'ArrowLeft') { keyboardKeys.a = true; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyS' || e.key === 'ArrowDown') { keyboardKeys.s = true; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyD' || e.key === 'ArrowRight') { keyboardKeys.d = true; this.syncDirectionalKeys(); }
         });
 
         window.addEventListener('keyup', (e) => {
             if (e.key === ' ' || e.code === 'Space') { keys.Space = false; this.stopCharging(); }
-            if (e.code === 'KeyW' || e.key === 'ArrowUp') keys.w = false;
-            if (e.code === 'KeyA' || e.key === 'ArrowLeft') keys.a = false;
-            if (e.code === 'KeyS' || e.key === 'ArrowDown') keys.s = false;
-            if (e.code === 'KeyD' || e.key === 'ArrowRight') keys.d = false;
+            if (e.code === 'KeyW' || e.key === 'ArrowUp') { keyboardKeys.w = false; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyA' || e.key === 'ArrowLeft') { keyboardKeys.a = false; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyS' || e.key === 'ArrowDown') { keyboardKeys.s = false; this.syncDirectionalKeys(); }
+            if (e.code === 'KeyD' || e.key === 'ArrowRight') { keyboardKeys.d = false; this.syncDirectionalKeys(); }
         });
 
         const dpadMapping = { 'dpad-up': 'w', 'dpad-down': 's', 'dpad-left': 'a', 'dpad-right': 'd' };
@@ -938,12 +986,14 @@ const GameCore = {
             if (btn) {
                 btn.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    keys[dpadMapping[id]] = true;
+                    keyboardKeys[dpadMapping[id]] = true;
+                    this.syncDirectionalKeys();
                 }, { passive: false });
 
                 const stopKey = (e) => {
                     e.preventDefault();
-                    keys[dpadMapping[id]] = false;
+                    keyboardKeys[dpadMapping[id]] = false;
+                    this.syncDirectionalKeys();
                 };
                 btn.addEventListener('touchend', stopKey, { passive: false });
                 btn.addEventListener('touchcancel', stopKey, { passive: false });
@@ -1187,6 +1237,7 @@ const GameCore = {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     },
 
     updateCharacterAnimation(group, prevPos, stepPhaseKey, isAirborne, isCharCharging, swingTime, dt) {
@@ -1293,15 +1344,17 @@ const GameCore = {
             this.shuttleShadow.position.set(this.shuttlePhys.pos.x, 0.02, this.shuttlePhys.pos.z);
         }
 
-        PlayerManager.movePlayer(this.playerGroup, keys, { x: 0, y: 0 }, false, isCharging, dt);
+        const joyDir = (typeof FloatingJoystick !== 'undefined') ? FloatingJoystick.dir : { x: 0, y: 0 };
+        const joyActive = (typeof FloatingJoystick !== 'undefined') ? FloatingJoystick.active : false;
+        PlayerManager.movePlayer(this.playerGroup, keys, joyDir, joyActive, isCharging, dt);
 
         if (isCharging) {
             power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
             if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power);
             if (gameState === 'rally' && PlayerManager.playerHasHitRight && this.shuttlePhys.vel.z > 0 && this.shuttlePhys.pos.z > -1.5) {
-                const flatPlayer = new THREE.Vector2(this.playerGroup.position.x, this.playerGroup.position.z);
-                const flatShuttle = new THREE.Vector2(this.shuttlePhys.pos.x, this.shuttlePhys.pos.z);
-                const dist2D = flatPlayer.distanceTo(flatShuttle);
+                this._tmpVec2A.set(this.playerGroup.position.x, this.playerGroup.position.z);
+                this._tmpVec2B.set(this.shuttlePhys.pos.x, this.shuttlePhys.pos.z);
+                const dist2D = this._tmpVec2A.distanceTo(this._tmpVec2B);
 
                 if (power >= 50 && !PlayerManager.isJumping && dist2D < (this.hitRadius + 1.2) && this.shuttlePhys.pos.y > 2.5) {
                     PlayerManager.isJumping = true; PlayerManager.isAirborneWaiting = true;
@@ -1321,10 +1374,12 @@ const GameCore = {
 
         // ジャンプ着地時の足元ダストリング生成
         if (this.prevPlayerJumping && !PlayerManager.isJumping) {
-            this.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.04, this.playerGroup.position.z), 0xffffff, 0.8, 2.4, 0.28, true, 0.55);
+            this._tmpVec3D.set(this.playerGroup.position.x, 0.04, this.playerGroup.position.z);
+            this.spawnRing(this._tmpVec3D, 0xffffff, 0.8, 2.4, 0.28, true, 0.55);
         }
         if (this.prevNpcJumping && !PlayerManager.npcIsJumping) {
-            this.spawnRing(new THREE.Vector3(this.npcGroup.position.x, 0.04, this.npcGroup.position.z), 0xffffff, 0.8, 2.4, 0.28, true, 0.55);
+            this._tmpVec3D.set(this.npcGroup.position.x, 0.04, this.npcGroup.position.z);
+            this.spawnRing(this._tmpVec3D, 0xffffff, 0.8, 2.4, 0.28, true, 0.55);
         }
         this.prevPlayerJumping = PlayerManager.isJumping;
         this.prevNpcJumping = PlayerManager.npcIsJumping;
@@ -1349,15 +1404,17 @@ const GameCore = {
             this.shuttlePhys.vel.y += BadmintonPhysics.gravity * dt;
             const sp = this.shuttlePhys.vel.length();
             if (sp > 0.01) {
-                this.shuttlePhys.vel.sub(this.shuttlePhys.vel.clone().normalize().multiplyScalar(Math.min(BadmintonPhysics.airDrag * sp * dt, sp)));
+                const drag = Math.min(BadmintonPhysics.airDrag * sp * dt, sp);
+                this.shuttlePhys.vel.addScaledVector(this._tmpVec3D.copy(this.shuttlePhys.vel).normalize(), -drag);
             }
-            const prevPos = this.shuttlePhys.pos.clone();
+            const prevPos = this._tmpPrevShuttlePos.copy(this.shuttlePhys.pos);
             this.shuttlePhys.pos.addScaledVector(this.shuttlePhys.vel, dt);
             this.shuttleGroup.position.copy(this.shuttlePhys.pos);
 
             if (sp > 0.1) {
-                const rot = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.shuttlePhys.vel.clone().normalize());
-                this.shuttleGroup.quaternion.slerp(rot, 12 * dt);
+                this._tmpVec3D.copy(this.shuttlePhys.vel).normalize();
+                this._tmpQuat.setFromUnitVectors(this._downVec, this._tmpVec3D);
+                this.shuttleGroup.quaternion.slerp(this._tmpQuat, 12 * dt);
             }
 
             this.shuttleShadow.position.set(this.shuttlePhys.pos.x, 0.02, this.shuttlePhys.pos.z);

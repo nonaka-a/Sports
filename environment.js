@@ -432,23 +432,36 @@ const EnvironmentManager = {
         }
     },
 
-    // 共通：最適化された観客席の構築
+    // 共通：InstancedMesh による観客席の構築
     buildSpectatorStands(group, halfL, stepColor, railColor, spectatorColors) {
         const standRows = 4;
         const standStepHeight = 0.65;
         const standStepDepth = 1.25;
         const standWidth = 44;
+        const spectatorCount = 22;
 
         const stepMat = new THREE.MeshStandardMaterial({ color: stepColor, roughness: 0.8 });
         const railMat = new THREE.MeshStandardMaterial({ color: railColor, metalness: 0.6, roughness: 0.3 });
         const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 });
-        const spectatorMats = spectatorColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.65 }));
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65 });
+        const colorPool = spectatorColors.map(c => new THREE.Color(c));
 
         // 共有ジオメトリ
         const bodyGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.52, 8);
         const headGeo = new THREE.SphereGeometry(0.17, 8, 8);
         const railGeo = new THREE.BoxGeometry(standWidth, 0.06, 0.06);
         const postGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.85, 6);
+        const stepGeos = [];
+        for (let i = 0; i < standRows; i++) {
+            stepGeos.push(new THREE.BoxGeometry(standWidth, standStepHeight * (i + 1), standStepDepth));
+        }
+
+        const dummy = new THREE.Object3D();
+        const totalPerStand = standRows * spectatorCount;
+        const postXs = [];
+        for (let rx = -standWidth / 2 + 2; rx <= standWidth / 2 - 2; rx += 4) {
+            postXs.push(rx);
+        }
 
         const buildStand = (posX, posZ, rotY) => {
             const standGroup = new THREE.Group();
@@ -457,36 +470,53 @@ const EnvironmentManager = {
             const frontRail = new THREE.Mesh(railGeo, railMat);
             frontRail.position.set(0, 0.85, -0.55);
             standGroup.add(frontRail);
-            for (let rx = -standWidth / 2 + 2; rx <= standWidth / 2 - 2; rx += 4) {
-                const p = new THREE.Mesh(postGeo, railMat);
-                p.position.set(rx, 0.425, -0.55);
-                standGroup.add(p);
-            }
 
+            const postInstanced = new THREE.InstancedMesh(postGeo, railMat, postXs.length);
+            postInstanced.frustumCulled = false;
+            postXs.forEach((rx, idx) => {
+                dummy.position.set(rx, 0.425, -0.55);
+                dummy.updateMatrix();
+                postInstanced.setMatrixAt(idx, dummy.matrix);
+            });
+            postInstanced.instanceMatrix.needsUpdate = true;
+            standGroup.add(postInstanced);
+
+            const bodyInstanced = new THREE.InstancedMesh(bodyGeo, bodyMat, totalPerStand);
+            const headInstanced = new THREE.InstancedMesh(headGeo, headMat, totalPerStand);
+            bodyInstanced.frustumCulled = false;
+            headInstanced.frustumCulled = false;
+
+            let specIdx = 0;
             for (let i = 0; i < standRows; i++) {
                 const stepH = standStepHeight * (i + 1);
-                const stepGeo = new THREE.BoxGeometry(standWidth, stepH, standStepDepth);
-                const stepMesh = new THREE.Mesh(stepGeo, stepMat);
+                const stepMesh = new THREE.Mesh(stepGeos[i], stepMat);
                 stepMesh.position.set(0, stepH / 2, i * standStepDepth);
                 standGroup.add(stepMesh);
 
-                const spectatorCount = 22;
                 for (let j = 0; j < spectatorCount; j++) {
                     const specX = ((j + 0.5) / spectatorCount - 0.5) * (standWidth - 3) + (Math.random() - 0.5) * 0.8;
                     const specY = stepH + 0.26;
                     const specZ = (i * standStepDepth) + (Math.random() - 0.5) * 0.3;
 
-                    const specMat = spectatorMats[Math.floor(Math.random() * spectatorMats.length)];
-                    const specBody = new THREE.Mesh(bodyGeo, specMat);
-                    specBody.position.set(specX, specY, specZ);
+                    dummy.position.set(specX, specY, specZ);
+                    dummy.updateMatrix();
+                    bodyInstanced.setMatrixAt(specIdx, dummy.matrix);
+                    bodyInstanced.setColorAt(specIdx, colorPool[Math.floor(Math.random() * colorPool.length)]);
 
-                    const specHead = new THREE.Mesh(headGeo, headMat);
-                    specHead.position.set(0, 0.36, 0);
-                    specBody.add(specHead);
-
-                    standGroup.add(specBody);
+                    dummy.position.set(specX, specY + 0.36, specZ);
+                    dummy.updateMatrix();
+                    headInstanced.setMatrixAt(specIdx, dummy.matrix);
+                    specIdx++;
                 }
             }
+
+            bodyInstanced.instanceMatrix.needsUpdate = true;
+            if (bodyInstanced.instanceColor) bodyInstanced.instanceColor.needsUpdate = true;
+            headInstanced.instanceMatrix.needsUpdate = true;
+
+            standGroup.add(bodyInstanced);
+            standGroup.add(headInstanced);
+
             standGroup.position.set(posX, 0, posZ);
             standGroup.rotation.y = rotY;
             group.add(standGroup);
