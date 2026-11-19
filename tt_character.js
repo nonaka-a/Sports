@@ -357,14 +357,20 @@ const TableTennisCharacter = {
     },
 
     updateAnimation(bodyMesh, state, dt) {
-        const rig = bodyMesh && bodyMesh.userData ? bodyMesh.userData.rig : null;
-        if (!rig) return { swingTime: state.swingTime, stepPhase: state.stepPhase };
+        if (!bodyMesh || !bodyMesh.userData) {
+            return { swingTime: state ? state.swingTime : -1, stepPhase: state ? state.stepPhase : 0 };
+        }
+        const rig = bodyMesh.userData.rig;
+        if (!rig) {
+            return { swingTime: state ? state.swingTime : -1, stepPhase: state ? state.stepPhase : 0 };
+        }
 
         const {
             isPlayer,
             vx,
             vz,
             isCharging,
+            chargeMode,
             chargeRatio,
             hitType,
             armMode,
@@ -480,6 +486,16 @@ const TableTennisCharacter = {
                     rElZ = -0.25 + s * 0.35;
                     rWrX = -0.2 + s * 0.35;
                     rWrZ = 0.25 - s * 0.45;
+                } else if (hitType === 'cut') {
+                    // カット：上から斜め前下へ切り下ろす
+                    targetTorsoX = 0.22 + s * 0.22;
+                    targetTorsoY = -0.30 + s * 0.52;
+                    rShX = -1.25 + s * 1.48;
+                    rShY = -0.15 + s * 0.32;
+                    rShZ = -0.45 + s * 0.68;
+                    rElX = -0.55 - s * 0.38;
+                    rElZ = 0.15;
+                    rWrX = 0.42;
                 } else if (hitType === 'stop') {
                     // ストップ（ツッツキ）：ラケット面を上に向けて短く差し出す
                     targetTorsoX = 0.36;
@@ -504,15 +520,27 @@ const TableTennisCharacter = {
                 swingTime = -1;
             }
         } else if (isCharging) {
-            // バックスイング（ため）：腰と右肩を後ろへ引きラケットを下げる
-            targetTorsoX = 0.28 + chargeRatio * 0.08;
-            targetTorsoY = -0.28 - chargeRatio * 0.32;
-            rShX = 0.15 + chargeRatio * 0.32;
-            rShY = -0.25;
-            rShZ = -0.45 - chargeRatio * 0.22;
-            rElX = -0.65 + chargeRatio * 0.15;
-            rElZ = 0.15;
-            rWrX = -0.12;
+            if (chargeMode === 'down') {
+                // カット構え：右腕を高めに引きラケット面を上向きに開く
+                targetTorsoX = 0.22 + chargeRatio * 0.04;
+                targetTorsoY = -0.22 - chargeRatio * 0.26;
+                rShX = -0.82 - chargeRatio * 0.45;
+                rShY = -0.15;
+                rShZ = -0.42 - chargeRatio * 0.18;
+                rElX = -0.75 + chargeRatio * 0.15;
+                rElZ = 0.15;
+                rWrX = 0.36;
+            } else {
+                // ドライブバックスイング（ため）：腰と右肩を後ろへ引きラケットを下げる
+                targetTorsoX = 0.28 + chargeRatio * 0.08;
+                targetTorsoY = -0.28 - chargeRatio * 0.32;
+                rShX = 0.15 + chargeRatio * 0.32;
+                rShY = -0.25;
+                rShZ = -0.45 - chargeRatio * 0.22;
+                rElX = -0.65 + chargeRatio * 0.15;
+                rElZ = 0.15;
+                rWrX = -0.12;
+            }
         } else {
             // 待機レディポジション
             const sway = Math.sin(idleTime * 3.4) * 0.04;

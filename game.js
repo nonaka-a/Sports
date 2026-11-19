@@ -2,6 +2,7 @@
 const keys = { w: false, a: false, s: false, d: false, Space: false };
 const keyboardKeys = { w: false, a: false, s: false, d: false };
 let isCharging = false;
+let chargeMode = 'up';
 let power = 0;
 const MAX_POWER = 100;
 const POWER_CHARGE_SPEED = 2.5;
@@ -108,6 +109,10 @@ const GameCore = {
                     UIManager.toggleSettings(false);
                     UIManager.hideResult();
                     UIManager.showStartScreen(true);
+                    isCharging = false;
+                    power = 0;
+                    chargeMode = 'up';
+                    UIManager.updatePowerBar(0, 'up', 'tabletennis');
                     this.resetShuttleTrail();
                     if (typeof FloatingJoystick !== 'undefined') {
                         FloatingJoystick.reset();
@@ -138,7 +143,8 @@ const GameCore = {
                     if (isPaused) {
                         isCharging = false;
                         power = 0;
-                        UIManager.updatePowerBar(0);
+                        chargeMode = 'up';
+                        UIManager.updatePowerBar(0, 'up', this.activeSport);
                         if (typeof FloatingJoystick !== 'undefined') {
                             FloatingJoystick.reset();
                         }
@@ -170,6 +176,10 @@ const GameCore = {
                 }
 
                 this.activeSport = this.selectedSport || 'badminton';
+                if (typeof UIManager !== 'undefined') {
+                    UIManager.setSportUI(this.activeSport);
+                    UIManager.updatePowerBar(0, 'up', this.activeSport);
+                }
 
                 if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
                     this.setBadmintonVisibility(false);
@@ -437,6 +447,11 @@ const GameCore = {
             this.spawnSparks(pos, 0xffae00, 16, 8.5, -6.0, 0.38, 1.35, 0.15);
             this.spawnSparks(pos, 0xffffff, 8, 10.5, -4.0, 0.28, 1.0, 0.1);
             this.triggerCameraShake(0.14, 0.16);
+        } else if (type === 'cut') {
+            this.spawnRing(pos, 0x00d8ff, 0.7, 3.8, 0.28, false, 0.92);
+            this.spawnRing(pos, 0x80f3ff, 0.35, 2.4, 0.22, false, 0.85);
+            this.spawnSparks(pos, 0x00d8ff, 14, 6.2, -5.0, 0.36, 1.2, 0.15);
+            this.spawnSparks(pos, 0xffffff, 6, 7.5, -4.0, 0.26, 0.9, 0.1);
         } else if (type === 'drop') {
             this.spawnRing(pos, 0x64f5a6, 0.4, 2.0, 0.22, false, 0.7);
             this.spawnSparks(pos, 0xb8ffd6, 6, 3.8, -5.0, 0.28, 0.8, 0.2);
@@ -965,7 +980,13 @@ const GameCore = {
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === ' ' || e.code === 'Space') { keys.Space = true; this.startCharging(); }
+            if (e.key === ' ' || e.code === 'Space' || e.code === 'KeyV' || e.key === 'v' || e.key === 'V') {
+                keys.Space = true;
+                this.startCharging('up');
+            }
+            if (e.code === 'KeyC' || e.key === 'c' || e.key === 'C') {
+                if (this.activeSport === 'tabletennis') this.startCharging('down');
+            }
             if (e.code === 'KeyW' || e.key === 'ArrowUp') { keyboardKeys.w = true; this.syncDirectionalKeys(); }
             if (e.code === 'KeyA' || e.key === 'ArrowLeft') { keyboardKeys.a = true; this.syncDirectionalKeys(); }
             if (e.code === 'KeyS' || e.key === 'ArrowDown') { keyboardKeys.s = true; this.syncDirectionalKeys(); }
@@ -973,7 +994,13 @@ const GameCore = {
         });
 
         window.addEventListener('keyup', (e) => {
-            if (e.key === ' ' || e.code === 'Space') { keys.Space = false; this.stopCharging(); }
+            if (e.key === ' ' || e.code === 'Space' || e.code === 'KeyV' || e.key === 'v' || e.key === 'V') {
+                keys.Space = false;
+                this.stopCharging('up');
+            }
+            if (e.code === 'KeyC' || e.key === 'c' || e.key === 'C') {
+                if (this.activeSport === 'tabletennis') this.stopCharging('down');
+            }
             if (e.code === 'KeyW' || e.key === 'ArrowUp') { keyboardKeys.w = false; this.syncDirectionalKeys(); }
             if (e.code === 'KeyA' || e.key === 'ArrowLeft') { keyboardKeys.a = false; this.syncDirectionalKeys(); }
             if (e.code === 'KeyS' || e.key === 'ArrowDown') { keyboardKeys.s = false; this.syncDirectionalKeys(); }
@@ -1000,35 +1027,43 @@ const GameCore = {
             }
         });
 
-        const hBtn = document.getElementById('hit-button');
-        if (hBtn) {
-            let activeHitTouchId = null;
+        const bindActionBtn = (btn, mode) => {
+            if (!btn) return;
+            let activeTouchId = null;
 
-            hBtn.addEventListener('touchstart', (e) => {
+            btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (activeHitTouchId !== null) return;
-
-                const touch = e.changedTouches[0];
-                activeHitTouchId = touch.identifier;
-                this.startCharging();
+                if (activeTouchId !== null) return;
+                activeTouchId = e.changedTouches[0].identifier;
+                this.startCharging(mode);
             }, { passive: false });
 
-            const endHitCharge = (e) => {
-                if (activeHitTouchId === null) return;
-
+            const endTouchCharge = (e) => {
+                if (activeTouchId === null) return;
                 for (let i = 0; i < e.changedTouches.length; i++) {
-                    if (e.changedTouches[i].identifier === activeHitTouchId) {
+                    if (e.changedTouches[i].identifier === activeTouchId) {
                         e.preventDefault();
-                        activeHitTouchId = null;
-                        this.stopCharging();
+                        activeTouchId = null;
+                        this.stopCharging(mode);
                         break;
                     }
                 }
             };
 
-            hBtn.addEventListener('touchend', endHitCharge, { passive: false });
-            hBtn.addEventListener('touchcancel', endHitCharge, { passive: false });
-        }
+            btn.addEventListener('touchend', endTouchCharge, { passive: false });
+            btn.addEventListener('touchcancel', endTouchCharge, { passive: false });
+
+            btn.addEventListener('mousedown', (e) => {
+                if (e.button !== 0 || activeTouchId !== null) return;
+                this.startCharging(mode);
+            });
+            btn.addEventListener('mouseup', () => {
+                if (activeTouchId === null) this.stopCharging(mode);
+            });
+        };
+
+        bindActionBtn(document.getElementById('hit-button'), 'up');
+        bindActionBtn(document.getElementById('cut-button'), 'down');
     },
 
     setBadmintonVisibility(visible) {
@@ -1038,14 +1073,27 @@ const GameCore = {
         if (this.shuttleShadow) this.shuttleShadow.visible = visible;
     },
 
-    startCharging() {
-        if (gameState !== 'ended' && gameState !== 'waiting' && (typeof UIManager === 'undefined' || !UIManager.isPaused)) isCharging = true;
+    startCharging(mode = 'up') {
+        if (gameState === 'ended' || gameState === 'waiting' || (typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
+        if (isCharging) return;
+        chargeMode = (this.activeSport === 'tabletennis' && mode === 'down') ? 'down' : 'up';
+        isCharging = true;
+        if (typeof UIManager !== 'undefined') {
+            UIManager.updatePowerBar(power, chargeMode, this.activeSport);
+        }
     },
 
-    stopCharging() {
+    stopCharging(mode = null) {
+        if (this.activeSport === 'tabletennis' && mode !== null) {
+            if (!isCharging || mode !== chargeMode) return;
+        }
+        const activeMode = chargeMode;
         isCharging = false;
         if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
-            TableTennisGame.stopCharging();
+            TableTennisGame.stopCharging(activeMode);
+            power = 0;
+            chargeMode = 'up';
+            if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
             return;
         }
         if (gameState === 'serve-player') {
@@ -1058,7 +1106,9 @@ const GameCore = {
                 this.playerSwingTime = 0;
             }
         }
-        power = 0; if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+        power = 0;
+        chargeMode = 'up';
+        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', this.activeSport);
     },
 
     hitShuttle(hitter, hitPower) {
@@ -1207,7 +1257,9 @@ const GameCore = {
         this.prevPlayerJumping = false;
         this.prevNpcJumping = false;
         this.resetShuttleTrail();
-        power = 0; if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+        power = 0;
+        chargeMode = 'up';
+        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'badminton');
         isCharging = false;
         PlayerManager.playerHasHitRight = true; PlayerManager.npcHasHitRight = true;
         PlayerManager.isJumping = false; PlayerManager.isAirborneWaiting = false;
@@ -1350,7 +1402,7 @@ const GameCore = {
 
         if (isCharging) {
             power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
-            if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power);
+            if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power, chargeMode, this.activeSport);
             if (gameState === 'rally' && PlayerManager.playerHasHitRight && this.shuttlePhys.vel.z > 0 && this.shuttlePhys.pos.z > -1.5) {
                 this._tmpVec2A.set(this.playerGroup.position.x, this.playerGroup.position.z);
                 this._tmpVec2B.set(this.shuttlePhys.pos.x, this.shuttlePhys.pos.z);

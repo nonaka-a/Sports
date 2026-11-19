@@ -751,6 +751,35 @@ html, body {
     background: linear-gradient(90deg, #ff3b30, #ffd700, #ffffff);
 }
 
+.smash-tag.is-cut {
+    color: #38d9ff;
+}
+
+#power-meter.cut-mode #power-fill {
+    background: linear-gradient(90deg, #7ef2ff, #00b4ff);
+}
+
+#power-meter.cut-mode.cut-ready #power-fill {
+    background: linear-gradient(90deg, #00e5ff, #007aff);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.75);
+}
+
+#power-meter.cut-mode.max-power {
+    border-color: #7ef2ff;
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.88);
+}
+
+#power-meter.cut-mode.max-power #power-fill {
+    background: linear-gradient(90deg, #007aff, #00e5ff, #ffffff);
+}
+
+.action-buttons-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
 #hit-button {
     width: 106px;
     height: 106px;
@@ -766,6 +795,37 @@ html, body {
     justify-content: center;
     color: #fff;
     transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+#cut-button {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #74ecff, #00b0e6 70%, #00729e 100%);
+    border: 3px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 6px 0 #004e6e, 0 10px 20px rgba(0, 0, 0, 0.45);
+    touch-action: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+#ui-layer.sport-tabletennis #hit-button {
+    width: 82px;
+    height: 82px;
+}
+
+#ui-layer.sport-tabletennis .hit-icon {
+    width: 30px;
+    height: 30px;
+}
+
+#ui-layer.sport-tabletennis .hit-label {
+    font-size: 11px;
 }
 
 .hit-icon {
@@ -785,6 +845,11 @@ html, body {
 #hit-button:active {
     transform: translateY(5px);
     box-shadow: 0 2px 0 #8a3800, 0 5px 10px rgba(0, 0, 0, 0.45);
+}
+
+#cut-button:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #004e6e, 0 5px 10px rgba(0, 0, 0, 0.45);
 }
 
 /* リザルト画面 */
@@ -883,5 +948,9 @@ html, body {
     #dpad-left { top: 51px; }
     #dpad-right { top: 51px; }
     #hit-button { width: 88px; height: 88px; }
+    #ui-layer.sport-tabletennis #hit-button,
+    #cut-button { width: 68px; height: 68px; }
+    .action-buttons-stack { gap: 8px; }
     .hit-icon { width: 32px; height: 32px; }
+    #ui-layer.sport-tabletennis .hit-icon { width: 24px; height: 24px; }
 }

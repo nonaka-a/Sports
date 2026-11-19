@@ -34,6 +34,8 @@ const TableTennisGame = {
     ballVel: new THREE.Vector3(0, 0, 0),
     gravity: -12.5,
     ballSpinAccel: 0,
+    ballHorizDrag: 0,
+    ballCurveAccelX: 0,
     ballBounceScaleY: 0.82,
     ballBounceScaleZ: 0.97,
     airDrag: 0.015,
@@ -60,6 +62,8 @@ const TableTennisGame = {
     serveDestZ: -1.5,
     serveFlightDuration: 0.50,
     serveFlightSpin: 0,
+    serveFlightHorizDrag: 0,
+    serveFlightCurveX: 0,
     serveNextBounceY: 0.82,
     serveNextBounceZ: 0.97,
 
@@ -81,10 +85,13 @@ const TableTennisGame = {
     playerStepPhase: 0,
     npcStepPhase: 0,
     cameraBasePos: new THREE.Vector3(0, 4.4, 8.6),
+    chargeRing: null,
+    chargeSparkTimer: 0,
     trailPoints: [],
     trailPointPool: [],
     trailMesh: null,
     trailIsSmash: false,
+    trailMode: 'normal',
     trailMaxPoints: 14,
 
     // GC抑制用再利用オブジェクト
@@ -99,7 +106,7 @@ const TableTennisGame = {
     _predHit: new THREE.Vector3(),
     _predResult: { bounce: null, hit: null },
     _animState: {
-        isPlayer: true, vx: 0, vz: 0, isCharging: false, chargeRatio: 0,
+        isPlayer: true, vx: 0, vz: 0, isCharging: false, chargeMode: 'up', chargeRatio: 0,
         swingTime: -1, stepPhase: 0, hitType: 'fore', armMode: 'none',
         diveTime: -1, diveDuration: 0.40, diveDir: 0, recoveryTime: 0, idleTime: 0
     },
@@ -393,6 +400,20 @@ const TableTennisGame = {
         playerShadow.position.y = 0.025;
         this.playerGroup.add(playerShadow);
 
+        const chargeRingGeo = new THREE.RingGeometry(0.68, 0.84, 36);
+        const chargeRingMat = new THREE.MeshBasicMaterial({
+            color: 0x00d8ff,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        this.chargeRing = new THREE.Mesh(chargeRingGeo, chargeRingMat);
+        this.chargeRing.rotation.x = -Math.PI / 2;
+        this.chargeRing.position.y = 0.03;
+        this.chargeRing.visible = false;
+        this.playerGroup.add(this.chargeRing);
+
         this.playerGroup.position.set(0, 0, 3.8);
         this.rootGroup.add(this.playerGroup);
 
@@ -476,6 +497,7 @@ const TableTennisGame = {
             this.trailPointPool.push(this.trailPoints.pop());
         }
         this.trailIsSmash = false;
+        this.trailMode = 'normal';
         if (this.trailMesh) this.trailMesh.visible = false;
     },
 
@@ -504,10 +526,20 @@ const TableTennisGame = {
         }
 
         this.trailMesh.visible = true;
-        this.trailMesh.material.color.setHex(this.trailIsSmash ? 0xff7b00 : 0x99ebff);
-        this.trailMesh.material.opacity = this.trailIsSmash ? 0.78 : 0.42;
-
-        const maxHalfWidth = this.trailIsSmash ? 0.095 : 0.045;
+        let trailColor = 0x99ebff;
+        let trailOpacity = 0.42;
+        let maxHalfWidth = 0.045;
+        if (this.trailMode === 'smash') {
+            trailColor = 0xff7b00;
+            trailOpacity = 0.78;
+            maxHalfWidth = 0.095;
+        } else if (this.trailMode === 'cut') {
+            trailColor = 0x00d8ff;
+            trailOpacity = 0.76;
+            maxHalfWidth = 0.088;
+        }
+        this.trailMesh.material.color.setHex(trailColor);
+        this.trailMesh.material.opacity = trailOpacity;
         const posAttr = this.trailMesh.geometry.attributes.position;
         const arr = posAttr.array;
 
@@ -593,10 +625,17 @@ const TableTennisGame = {
         this.resetTrail();
 
         power = 0;
-        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+        chargeMode = 'up';
+        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
         isCharging = false;
+        if (this.chargeRing) this.chargeRing.visible = false;
+        this.chargeSparkTimer = 0;
 
         this.ballSpinAccel = 0;
+        this.ballHorizDrag = 0;
+        this.ballCurveAccelX = 0;
+        this.serveFlightHorizDrag = 0;
+        this.serveFlightCurveX = 0;
         this.ballBounceScaleY = 0.82;
         this.ballBounceScaleZ = 0.97;
         this.receiverBounces = 0;
@@ -637,14 +676,22 @@ const TableTennisGame = {
         }
     },
 
-    // ターゲット地点へ指定時間 T で着弾する初速ベクトルを計算（トップスピンによる追加加速度対応）
-    computeBallVelocity(start, target, duration, spinAccel = 0) {
+    // ターゲット地点へ指定時間 T で着弾する初速ベクトルを計算（縦スピン・水平減衰・横回転カーブ対応）
+    computeBallVelocity(start, target, duration, spinAccel = 0, horizDrag = 0, curveAccelX = 0) {
         const totalGravity = this.gravity + spinAccel;
         const dx = target.x - start.x;
         const dy = target.y - start.y;
         const dz = target.z - start.z;
-        const vx = dx / duration;
-        const vz = dz / duration;
+
+        let vx, vz;
+        if (horizDrag > 0.0001) {
+            const effTime = (1 - Math.exp(-horizDrag * duration)) / horizDrag;
+            vx = (dx - (curveAccelX / horizDrag) * (duration - effTime)) / effTime;
+            vz = dz / effTime;
+        } else {
+            vx = (dx - 0.5 * curveAccelX * duration * duration) / duration;
+            vz = dz / duration;
+        }
         const vy = (dy - 0.5 * totalGravity * duration * duration) / duration;
         return new THREE.Vector3(vx, vy, vz);
     },
@@ -669,13 +716,19 @@ const TableTennisGame = {
         leftArm.rotation.x += (targetRotX - leftArm.rotation.x) * 16 * dt;
     },
 
-    serveBall(server, servePower = 30) {
-        const isLongServe = (servePower >= 50);
+    serveBall(server, servePower = 30, mode = 'up') {
+        const isCutServe = (server === 'player' && mode === 'down');
+        const isLongServe = (!isCutServe && servePower >= 50);
         const pRatio = isLongServe ? Math.max(0, Math.min(1, (servePower - 50) / 50)) : 0;
 
         if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(isLongServe);
         this.trailIsSmash = isLongServe;
+        this.trailMode = isCutServe ? 'cut' : (isLongServe ? 'smash' : 'normal');
         this.ballSpinAccel = 0;
+        this.ballHorizDrag = 0;
+        this.ballCurveAccelX = 0;
+        this.serveFlightHorizDrag = 0;
+        this.serveFlightCurveX = 0;
         this.ballBounceScaleY = 0.82;
         this.ballBounceScaleZ = 0.97;
         this.netFault = false;
@@ -686,12 +739,12 @@ const TableTennisGame = {
         this.servePhase = 'idle';
         this.lastHitter = server;
         this.npcReactionTimer = 0;
-        this.core.spawnHitEffect(this.ballPos, isLongServe ? 'smash' : 'lob');
+        this.core.spawnHitEffect(this.ballPos, isCutServe ? 'cut' : (isLongServe ? 'smash' : 'lob'));
 
         const targetY = this.tableHeight + this.ballRadius;
 
         if (server === 'player') {
-            this.playerHitType = 'fore';
+            this.playerHitType = isCutServe ? 'cut' : 'fore';
             this.playerSwingTime = 0;
 
             // 十字キーで左右方向を打ち分け（無入力時は中央寄り）
@@ -700,7 +753,21 @@ const TableTennisGame = {
                 ? aimDir * (0.35 + (isLongServe ? 0.25 : 0.15))
                 : this.playerGroup.position.x * 0.35 + (Math.random() - 0.5) * 0.25;
 
-            if (isLongServe) {
+            if (isCutServe) {
+                // DOWNサーブ：ため量に応じて下回転・失速・横曲がりを付与（ためなし時は通常並みに届く）
+                const cutRatio = Math.max(0, Math.min(1, servePower / 100));
+                const curveDir = keys.a ? -1 : (keys.d ? 1 : -1);
+                const firstZ = 1.18 + cutRatio * 0.28;
+                this.serveDestX = (aimDir !== 0 ? aimDir : curveDir) * (0.35 + cutRatio * 0.65);
+                this.serveDestZ = -(1.35 + cutRatio * 0.45);
+                this.serveFlightDuration = 0.54 + cutRatio * 0.08;
+                this.serveFlightSpin = 1.2 + cutRatio * 2.4;
+                this.serveFlightHorizDrag = cutRatio * 0.55;
+                this.serveFlightCurveX = curveDir * (cutRatio * 3.0);
+                this.serveNextBounceY = 0.80 - cutRatio * 0.20;
+                this.serveNextBounceZ = 0.90 - cutRatio * 0.20;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.24, 0));
+            } else if (isLongServe) {
                 // 長めチャージ：自陣奥バウンドから相手エンドライン付近へ伸びるロングサーブ
                 const firstZ = 2.10 + pRatio * 0.25;
                 this.serveDestX = aimDir !== 0 ? aimDir * (1.15 + pRatio * 0.32) : (Math.random() - 0.5) * 0.45;
@@ -778,30 +845,37 @@ const TableTennisGame = {
         return this.getReachInfo(charPos, ballPos, isPlayer, maxReachXOverride).inRange;
     },
 
-    stopCharging() {
+    stopCharging(mode = 'up') {
         if (gameState === 'serve-player') {
-            this.serveBall('player', power);
+            this.serveBall('player', power, mode);
         } else if (this.serveAutoFired) {
             this.serveAutoFired = false;
         } else if (gameState === 'rally' && this.playerCanHit && this.receiverBounces === 1) {
             const reach = this.getReachInfo(this.playerGroup.position, this.ballPos, true);
             if (reach.inRange && this.ballPos.z > 0.2) {
-                this.hitBall('player', power, reach);
+                this.hitBall('player', power, reach, mode);
             } else if (this.playerSwingTime < 0) {
-                this.playerHitType = (this.ballPos.x < this.playerGroup.position.x - this.middleThresholdX) ? 'back' : 'fore';
+                this.playerHitType = (mode === 'down')
+                    ? 'cut'
+                    : ((this.ballPos.x < this.playerGroup.position.x - this.middleThresholdX) ? 'back' : 'fore');
                 this.playerSwingTime = 0;
             }
         } else if (gameState === 'rally' && this.playerSwingTime < 0) {
-            this.playerHitType = (this.ballPos.x < this.playerGroup.position.x - this.middleThresholdX) ? 'back' : 'fore';
+            this.playerHitType = (mode === 'down')
+                ? 'cut'
+                : ((this.ballPos.x < this.playerGroup.position.x - this.middleThresholdX) ? 'back' : 'fore');
             this.playerSwingTime = 0;
         }
         power = 0;
-        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+        if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
     },
 
-    hitBall(hitter, hitPower, reachInfo = null) {
+    hitBall(hitter, hitPower, reachInfo = null, mode = 'up') {
         const isStop = (hitter === 'player' && keys.s);
-        const isDrive = (!isStop && hitPower >= 50);
+        const isDownBtn = (hitter === 'player' && mode === 'down' && !isStop);
+        const isCut = (isDownBtn && hitPower >= 50);
+        const isPush = (isDownBtn && hitPower < 50);
+        const isDrive = (!isStop && !isDownBtn && hitPower >= 50);
 
         const targetY = this.tableHeight + this.ballRadius;
         this.isServeFirstBounce = false;
@@ -816,7 +890,7 @@ const TableTennisGame = {
             const relX = this.ballPos.x - this.playerGroup.position.x;
             const isMiddle = !reach.isDive && Math.abs(relX) <= this.middleThresholdX;
 
-            this.playerHitType = isStop ? 'stop' : (relX < -this.middleThresholdX ? 'back' : 'fore');
+            this.playerHitType = isStop ? 'stop' : (isDownBtn ? 'cut' : (relX < -this.middleThresholdX ? 'back' : 'fore'));
             this.playerSwingTime = 0;
             this.playerCanHit = false;
             this.npcCanHit = true;
@@ -826,24 +900,44 @@ const TableTennisGame = {
             let tz = -1.65 - Math.random() * 0.55;
             let duration = 0.78;
             let spinAccel = 0;
+            let horizDrag = 0;
             let bounceY = 0.84;
             let bounceZ = 0.96;
 
             if (reach.isDive) {
-                // 左右隅への飛びつき返球：ジャンプアクション＆硬直＋高いチャンスボールのロビング
+                // 左右隅への飛びつき返球：アクション・硬直は発生
                 this.playerDiveTime = 0;
                 this.playerDiveDir = reach.dir;
                 this.playerRecoveryTime = this.recoveryDuration;
 
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                tx = (Math.random() - 0.5) * 0.6;
-                tz = -1.35 - Math.random() * 0.45;
-                duration = 1.12;
-                bounceY = 0.96;
-                bounceZ = 0.84;
-                this.trailIsSmash = false;
-                this.core.spawnHitEffect(this.ballPos, 'lob');
-                this.core.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.05, this.playerGroup.position.z), 0xffffff, 0.4, 1.8, 0.28, true, 0.65);
+                if (isDownBtn) {
+                    // カット守備：飛びついても球を高く浮かせず、低弾道＋下回転でしっかり相手コートへ送り返す
+                    if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
+                    const pRatio = Math.max(0, Math.min(1, hitPower / 100));
+                    tx = keys.a ? -0.85 : (keys.d ? 0.85 : (Math.random() - 0.5) * 0.6);
+                    tz = -1.55 - pRatio * 0.35 - Math.random() * 0.25;
+                    duration = 0.76;
+                    spinAccel = 3.6 + pRatio * 1.2;
+                    horizDrag = 0.65 + pRatio * 0.25;
+                    bounceY = 0.62 - pRatio * 0.06;
+                    bounceZ = 0.75 - pRatio * 0.06;
+                    this.trailIsSmash = false;
+                    this.trailMode = 'cut';
+                    this.core.spawnHitEffect(this.ballPos, 'cut');
+                    this.core.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.05, this.playerGroup.position.z), 0x00d8ff, 0.4, 1.8, 0.28, true, 0.7);
+                } else {
+                    // ドライブ等の強打：飛びつき時はチャンスボール（ロビング）になる
+                    if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
+                    tx = (Math.random() - 0.5) * 0.6;
+                    tz = -1.35 - Math.random() * 0.45;
+                    duration = 1.12;
+                    bounceY = 0.96;
+                    bounceZ = 0.84;
+                    this.trailIsSmash = false;
+                    this.trailMode = 'normal';
+                    this.core.spawnHitEffect(this.ballPos, 'lob');
+                    this.core.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.05, this.playerGroup.position.z), 0xffffff, 0.4, 1.8, 0.28, true, 0.65);
+                }
             } else if (isMiddle) {
                 // ミドルに詰まった時は、ために関わらず遅く高い山なりのチャンスボールになる
                 if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
@@ -853,12 +947,46 @@ const TableTennisGame = {
                 bounceY = 0.92;
                 bounceZ = 0.90;
                 this.trailIsSmash = false;
+                this.trailMode = 'normal';
                 this.core.spawnHitEffect(this.ballPos, 'drop');
             } else if (isStop) {
                 if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
                 tz = -0.82 - Math.random() * 0.25;
                 duration = 0.64;
                 this.trailIsSmash = false;
+                this.trailMode = 'normal';
+                this.core.spawnHitEffect(this.ballPos, 'drop');
+            } else if (isCut) {
+                // DOWNため50%以上：下回転カット。適度に失速して落ち、バウンド後の跳ねを抑える
+                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
+                const pRatio = Math.max(0, Math.min(1, (hitPower - 50) / 50));
+                if (keys.a) {
+                    tx = -(1.05 + pRatio * 0.35);
+                } else if (keys.d) {
+                    tx = (1.05 + pRatio * 0.35);
+                } else {
+                    tx = (Math.random() - 0.5) * 0.75;
+                }
+                tz = -1.35 - pRatio * 0.45 - Math.random() * 0.30;
+                duration = 0.72 + pRatio * 0.10;
+                spinAccel = 3.8 + pRatio * 1.4;
+                horizDrag = 0.75 + pRatio * 0.35;
+                bounceY = 0.60 - pRatio * 0.08;
+                bounceZ = 0.74 - pRatio * 0.08;
+                this.trailIsSmash = false;
+                this.trailMode = 'cut';
+                this.core.spawnHitEffect(this.ballPos, 'cut');
+            } else if (isPush) {
+                // DOWN溜めなし：弾道低めに飛ぶツッツキ
+                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
+                tz = -1.30 - Math.random() * 0.40;
+                duration = 0.52;
+                spinAccel = 2.0;
+                horizDrag = 0.35;
+                bounceY = 0.70;
+                bounceZ = 0.84;
+                this.trailIsSmash = false;
+                this.trailMode = 'normal';
                 this.core.spawnHitEffect(this.ballPos, 'drop');
             } else if (isDrive) {
                 // ため50%以上：ためるほどスピードが増し、左右コースもサイドライン際(最大±1.55)まで厳しく打てるドライブ
@@ -877,6 +1005,7 @@ const TableTennisGame = {
                 bounceY = 0.70 - pRatio * 0.08;
                 bounceZ = 1.08 + pRatio * 0.14;
                 this.trailIsSmash = true;
+                this.trailMode = 'smash';
                 this.core.spawnHitEffect(this.ballPos, 'smash');
             } else {
                 // ためが少ない時：山なり気味でゆっくりな返球（ため量に応じて少しずつ速くなる）
@@ -886,14 +1015,17 @@ const TableTennisGame = {
                 tz = -1.50 - Math.random() * 0.50;
                 bounceY = 0.86;
                 this.trailIsSmash = false;
+                this.trailMode = 'normal';
                 this.core.spawnHitEffect(this.ballPos, 'lob');
             }
 
             this.ballSpinAccel = spinAccel;
+            this.ballHorizDrag = horizDrag;
+            this.ballCurveAccelX = 0;
             this.ballBounceScaleY = bounceY;
             this.ballBounceScaleZ = bounceZ;
             const target = new THREE.Vector3(tx, targetY, tz);
-            this.ballVel.copy(this.computeBallVelocity(this.ballPos, target, duration, spinAccel));
+            this.ballVel.copy(this.computeBallVelocity(this.ballPos, target, duration, spinAccel, horizDrag, 0));
         } else {
             const reach = reachInfo || this.getReachInfo(this.npcGroup.position, this.ballPos, false);
             const relX = this.ballPos.x - this.npcGroup.position.x;
@@ -976,9 +1108,12 @@ const TableTennisGame = {
                 BadmintonAudio.playHit(shotType === 'smash');
             }
             this.ballSpinAccel = spinAccel;
+            this.ballHorizDrag = 0;
+            this.ballCurveAccelX = 0;
             this.ballBounceScaleY = bounceY;
             this.ballBounceScaleZ = bounceZ;
             this.trailIsSmash = (shotType === 'smash');
+            this.trailMode = (shotType === 'smash') ? 'smash' : 'normal';
             this.core.spawnHitEffect(this.ballPos, shotType);
             const target = new THREE.Vector3(tx, targetY, tz);
             this.ballVel.copy(this.computeBallVelocity(this.ballPos, target, duration, spinAccel));
@@ -1111,12 +1246,20 @@ const TableTennisGame = {
         const p = this._predPos.copy(this.ballPos);
         const v = this._predVel.copy(this.ballVel);
         let spin = this.ballSpinAccel;
+        let horizDrag = this.ballHorizDrag;
+        let curveX = this.ballCurveAccelX;
         const step = 0.03;
         let hasBounce = false;
         let hasHit = false;
 
         for (let i = 0; i < 80; i++) {
+            v.x += curveX * step;
             v.y += (this.gravity + spin) * step;
+            if (horizDrag > 0) {
+                const hf = Math.exp(-horizDrag * step);
+                v.x *= hf;
+                v.z *= hf;
+            }
             p.addScaledVector(v, step);
             if (p.y <= this.tableHeight + this.ballRadius && v.y < 0 && Math.abs(p.x) <= this.tableWidth / 2 && Math.abs(p.z) <= this.tableLength / 2) {
                 p.y = this.tableHeight + this.ballRadius;
@@ -1127,6 +1270,8 @@ const TableTennisGame = {
                 v.y = Math.abs(v.y) * this.ballBounceScaleY;
                 v.z *= this.ballBounceScaleZ;
                 spin = 0;
+                horizDrag = 0;
+                curveX *= 0.25;
             }
             if (!hasHit && p.z <= targetZ) {
                 this._predHit.copy(p);
@@ -1180,6 +1325,8 @@ const TableTennisGame = {
         if (gameState === 'ended' || gameState === 'waiting') return;
         gameState = 'ended';
         this.trailIsSmash = false;
+        this.trailMode = 'normal';
+        if (this.chargeRing) this.chargeRing.visible = false;
 
         if (typeof BadmintonAudio !== 'undefined') {
             BadmintonAudio.playCheer();
@@ -1213,6 +1360,58 @@ const TableTennisGame = {
                     this.resetToServe(nextServer);
                 }
             }, 2000);
+        }
+    },
+
+    updateChargeVFX(dt) {
+        if (!this.chargeRing) return;
+        if (isCharging && (gameState === 'rally' || gameState === 'serve-player')) {
+            const isCutMode = (chargeMode === 'down');
+            if (isCutMode) {
+                this.chargeRing.visible = true;
+                this.chargeRing.material.color.setHex(power >= 50 ? 0x00e5ff : 0x70f0ff);
+                this.chargeRing.material.opacity = power >= 50 ? 0.92 : 0.50;
+                const pulse = 1 + Math.sin(this.core.idleTime * 12) * 0.06;
+                this.chargeRing.scale.setScalar(pulse);
+
+                this.chargeSparkTimer += dt;
+                if (this.chargeSparkTimer >= (power >= 50 ? 0.045 : 0.09)) {
+                    this.chargeSparkTimer = 0;
+                    const angle = Math.random() * Math.PI * 2;
+                    const rad = 0.35 + Math.random() * 0.5;
+                    const p = new THREE.Vector3(
+                        this.playerGroup.position.x + Math.cos(angle) * rad,
+                        0.12,
+                        this.playerGroup.position.z + Math.sin(angle) * rad
+                    );
+                    this.core.spawnSparks(p, power >= 50 ? 0x00d8ff : 0x8ef5ff, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
+                }
+            } else if (power >= 50) {
+                this.chargeRing.visible = true;
+                this.chargeRing.material.color.setHex(power >= 95 ? 0xff3b30 : 0xff9500);
+                this.chargeRing.material.opacity = 0.85;
+                const pulse = 1 + Math.sin(this.core.idleTime * 12) * 0.06;
+                this.chargeRing.scale.setScalar(pulse);
+
+                this.chargeSparkTimer += dt;
+                if (this.chargeSparkTimer >= 0.045) {
+                    this.chargeSparkTimer = 0;
+                    const angle = Math.random() * Math.PI * 2;
+                    const rad = 0.35 + Math.random() * 0.5;
+                    const p = new THREE.Vector3(
+                        this.playerGroup.position.x + Math.cos(angle) * rad,
+                        0.12,
+                        this.playerGroup.position.z + Math.sin(angle) * rad
+                    );
+                    this.core.spawnSparks(p, power >= 95 ? 0xff4500 : 0xffd700, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
+                }
+            } else {
+                this.chargeRing.visible = false;
+                this.chargeSparkTimer = 0;
+            }
+        } else {
+            this.chargeRing.visible = false;
+            this.chargeSparkTimer = 0;
         }
     },
 
@@ -1261,7 +1460,8 @@ const TableTennisGame = {
                     this.serveTossVelY = 5.4;
                     this.serveArmTime = 0.35;
                     this.serveAutoFired = false;
-                    this.core.spawnRing(this.ballPos, 0xffffff, 0.15, 0.65, 0.22, false, 0.6);
+                    const tossRingColor = (chargeMode === 'down') ? 0x00d8ff : 0xffffff;
+                    this.core.spawnRing(this.ballPos, tossRingColor, 0.15, 0.65, 0.22, false, 0.65);
                 }
             } else {
                 this.serveTossVelY += this.gravity * dt;
@@ -1272,12 +1472,13 @@ const TableTennisGame = {
                 this.ballPos.z = this.playerGroup.position.z - 0.40;
 
                 if (this.serveTossVelY < 0 && this.ballPos.y <= 1.25) {
-                    // トスが打点まで落ちてきたら自動サーブ（最大ためロング）
-                    this.serveBall('player', power);
+                    // トスが打点まで落ちてきたら自動サーブ
+                    this.serveBall('player', power, chargeMode);
                     this.serveAutoFired = true;
                     isCharging = false;
                     power = 0;
-                    if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+                    chargeMode = 'up';
+                    if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
                 }
             }
         } else if (gameState === 'serve-npc') {
@@ -1320,15 +1521,16 @@ const TableTennisGame = {
         // チャージ更新＆自動ヒット（ワンバウンド後）
         if (isCharging) {
             power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
-            if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power);
+            if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power, chargeMode, 'tabletennis');
 
             if (gameState === 'rally' && this.playerCanHit && this.receiverBounces === 1 && this.ballPos.z > 0.2) {
                 const reach = this.getReachInfo(this.playerGroup.position, this.ballPos, true);
                 if (reach.inRange) {
-                    this.hitBall('player', power, reach);
+                    this.hitBall('player', power, reach, chargeMode);
                     isCharging = false;
                     power = 0;
-                    if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0);
+                    chargeMode = 'up';
+                    if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
                 }
             }
         }
@@ -1340,7 +1542,13 @@ const TableTennisGame = {
         if (gameState === 'rally') {
             const prevPos = this._tmpPrevBallPos.copy(this.ballPos);
 
+            this.ballVel.x += this.ballCurveAccelX * dt;
             this.ballVel.y += (this.gravity + this.ballSpinAccel) * dt;
+            if (this.ballHorizDrag > 0) {
+                const hFactor = Math.exp(-this.ballHorizDrag * dt);
+                this.ballVel.x *= hFactor;
+                this.ballVel.z *= hFactor;
+            }
             const sp = this.ballVel.length();
             if (sp > 0.01) {
                 this.ballVel.multiplyScalar(Math.max(0, 1 - this.airDrag * dt));
@@ -1360,10 +1568,13 @@ const TableTennisGame = {
                     if (Math.abs(xAtNet) <= this.tableWidth / 2 + 0.14 && yAtNet < netTopY) {
                         this.netFault = true;
                         this.ballSpinAccel = 0;
+                        this.ballHorizDrag = 0;
+                        this.ballCurveAccelX = 0;
                         this.ballPos.z = prevPos.z > 0 ? 0.06 : -0.06;
                         this.ballPos.y = yAtNet;
                         this.ballVel.set(this.ballVel.x * 0.2, 0.4, prevPos.z > 0 ? -0.9 : 0.9);
                         this.trailIsSmash = false;
+                        this.trailMode = 'normal';
                         this.core.spawnRing(new THREE.Vector3(xAtNet, yAtNet, 0), 0xff453a, 0.25, 1.4, 0.25, false, 0.85);
                         this.playBounceSound(false);
                     }
@@ -1378,7 +1589,8 @@ const TableTennisGame = {
             if (onTableArea && !this.netFault && prevPos.y >= tableSurfaceY - 0.08 && this.ballPos.y <= tableSurfaceY && this.ballVel.y < 0) {
                 this.ballPos.y = tableSurfaceY;
                 this.playBounceSound(false);
-                this.core.spawnRing(new THREE.Vector3(this.ballPos.x, this.tableHeight + 0.015, this.ballPos.z), 0xffffff, 0.18, 0.85, 0.24, true, 0.75);
+                const bounceRingColor = (this.trailMode === 'cut') ? 0x00d8ff : 0xffffff;
+                this.core.spawnRing(new THREE.Vector3(this.ballPos.x, this.tableHeight + 0.015, this.ballPos.z), bounceRingColor, 0.18, 0.85, 0.24, true, 0.75);
 
                 if (this.isServeFirstBounce) {
                     const isPlayerServe = (this.lastHitter === 'player');
@@ -1386,13 +1598,17 @@ const TableTennisGame = {
                     if (onServerHalf) {
                         this.isServeFirstBounce = false;
                         this.ballSpinAccel = this.serveFlightSpin;
+                        this.ballHorizDrag = this.serveFlightHorizDrag;
+                        this.ballCurveAccelX = this.serveFlightCurveX;
                         this.ballBounceScaleY = this.serveNextBounceY;
                         this.ballBounceScaleZ = this.serveNextBounceZ;
                         this.ballVel.copy(this.computeBallVelocity(
                             this.ballPos,
                             new THREE.Vector3(this.serveDestX, tableSurfaceY, this.serveDestZ),
                             this.serveFlightDuration,
-                            this.serveFlightSpin
+                            this.serveFlightSpin,
+                            this.serveFlightHorizDrag,
+                            this.serveFlightCurveX
                         ));
                         if (!isPlayerServe) this.playerCanHit = true;
                         else this.npcCanHit = true;
@@ -1405,10 +1621,13 @@ const TableTennisGame = {
                         this.scorePoint(winner, winner === 'player' ? "POINT FOR YOU!" : "POINT FOR NPC!");
                     } else {
                         this.receiverBounces++;
+                        this.lastReceiverBounceZ = this.ballPos.z;
                         this.ballVel.y = Math.abs(this.ballVel.y) * this.ballBounceScaleY;
                         this.ballVel.x *= 0.96;
                         this.ballVel.z *= this.ballBounceScaleZ;
                         this.ballSpinAccel = 0;
+                        this.ballHorizDrag = 0;
+                        this.ballCurveAccelX *= 0.25;
 
                         if (this.receiverBounces >= 2) {
                             const winner = this.lastHitter;
@@ -1441,7 +1660,8 @@ const TableTennisGame = {
         const overTable = Math.abs(this.ballPos.x) <= this.tableWidth / 2 && Math.abs(this.ballPos.z) <= this.tableLength / 2;
         this.ballShadow.position.set(this.ballPos.x, overTable ? this.tableHeight + 0.012 : 0.025, this.ballPos.z);
 
-        // トレイル・VFX更新
+        // チャージVFX・トレイル・VFX更新
+        this.updateChargeVFX(dt);
         this.updateTrail(gameState === 'rally');
         this.core.updateVFX(dt);
 
@@ -1466,11 +1686,14 @@ const TableTennisGame = {
         const pVz = (this.playerGroup.position.z - this.prevPlayerPos.z) * invDt;
         this.prevPlayerPos.copy(this.playerGroup.position);
 
+        const playerBodyMesh = this.playerGroup.getObjectByName("bodyMesh") || (this.playerGroup.children && this.playerGroup.children[0]);
+
         const st = this._animState;
         st.isPlayer = true;
         st.vx = pVx;
         st.vz = pVz;
         st.isCharging = isCharging;
+        st.chargeMode = chargeMode;
         st.chargeRatio = Math.min(1, power / MAX_POWER);
         st.swingTime = this.playerSwingTime;
         st.stepPhase = this.playerStepPhase;
@@ -1480,24 +1703,31 @@ const TableTennisGame = {
         st.diveDuration = this.diveDuration;
         st.diveDir = this.playerDiveDir;
         st.recoveryTime = this.playerRecoveryTime;
-        st.idleTime = this.core.idleTime;
+        st.idleTime = this.core ? this.core.idleTime : 0;
 
-        const pAnimRes = TableTennisCharacter.updateAnimation(
-            this.playerGroup.getObjectByName("bodyMesh"),
-            st,
-            dt
-        );
-        this.playerSwingTime = pAnimRes.swingTime;
-        this.playerStepPhase = pAnimRes.stepPhase;
+        if (playerBodyMesh) {
+            const pAnimRes = TableTennisCharacter.updateAnimation(
+                playerBodyMesh,
+                st,
+                dt
+            );
+            if (pAnimRes) {
+                this.playerSwingTime = pAnimRes.swingTime;
+                this.playerStepPhase = pAnimRes.stepPhase;
+            }
+        }
 
         const nVx = (this.npcGroup.position.x - this.prevNpcPos.x) * invDt;
         const nVz = (this.npcGroup.position.z - this.prevNpcPos.z) * invDt;
         this.prevNpcPos.copy(this.npcGroup.position);
 
+        const npcBodyMesh = this.npcGroup.getObjectByName("bodyMesh") || (this.npcGroup.children && this.npcGroup.children[0]);
+
         st.isPlayer = false;
         st.vx = nVx;
         st.vz = nVz;
         st.isCharging = false;
+        st.chargeMode = 'up';
         st.chargeRatio = 0;
         st.swingTime = this.npcSwingTime;
         st.stepPhase = this.npcStepPhase;
@@ -1507,13 +1737,17 @@ const TableTennisGame = {
         st.diveDir = this.npcDiveDir;
         st.recoveryTime = this.npcRecoveryTime;
 
-        const nAnimRes = TableTennisCharacter.updateAnimation(
-            this.npcGroup.getObjectByName("bodyMesh"),
-            st,
-            dt
-        );
-        this.npcSwingTime = nAnimRes.swingTime;
-        this.npcStepPhase = nAnimRes.stepPhase;
+        if (npcBodyMesh) {
+            const nAnimRes = TableTennisCharacter.updateAnimation(
+                npcBodyMesh,
+                st,
+                dt
+            );
+            if (nAnimRes) {
+                this.npcSwingTime = nAnimRes.swingTime;
+                this.npcStepPhase = nAnimRes.stepPhase;
+            }
+        }
 
         // カメラ追従＆シェイク
         this.cameraBasePos.x += (this.playerGroup.position.x * 0.48 - this.cameraBasePos.x) * 4.5 * dt;

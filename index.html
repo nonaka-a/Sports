@@ -158,20 +158,29 @@
                 <div class="power-wrapper">
                     <div class="power-label-row">
                         <span>POWER</span>
-                        <span class="smash-tag">SMASH</span>
+                        <span id="power-mode-tag" class="smash-tag">SMASH</span>
                     </div>
                     <div id="power-meter">
                         <div class="smash-threshold-line"></div>
                         <div id="power-fill"></div>
                     </div>
                 </div>
-                <div id="hit-button">
-                    <svg class="hit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <ellipse cx="14.5" cy="8.5" rx="4.5" ry="6" transform="rotate(40 14.5 8.5)"/>
-                        <line x1="10.5" y1="13" x2="5" y2="19"/>
-                        <circle cx="7" cy="6" r="1.4" fill="currentColor" stroke="none"/>
-                    </svg>
-                    <span class="hit-label">HIT</span>
+                <div class="action-buttons-stack">
+                    <div id="hit-button">
+                        <svg class="hit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <ellipse cx="14.5" cy="8.5" rx="4.5" ry="6" transform="rotate(40 14.5 8.5)"/>
+                            <line x1="10.5" y1="13" x2="5" y2="19"/>
+                            <circle cx="7" cy="6" r="1.4" fill="currentColor" stroke="none"/>
+                        </svg>
+                        <span id="hit-btn-label" class="hit-label">HIT</span>
+                    </div>
+                    <div id="cut-button" style="display: none;">
+                        <svg class="hit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14"/>
+                            <path d="M6 13l6 6 6-6"/>
+                        </svg>
+                        <span class="hit-label">DOWN</span>
+                    </div>
                 </div>
             </div>
         </div>

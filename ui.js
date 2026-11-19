@@ -201,13 +201,39 @@ const UIManager = {
         if (resultScreen) resultScreen.style.display = 'none';
     },
 
-    updatePowerBar(percent) {
+    setSportUI(sport) {
+        const uiLayer = document.getElementById('ui-layer');
+        const hitLabel = document.getElementById('hit-btn-label');
+        const cutBtn = document.getElementById('cut-button');
+        const modeTag = document.getElementById('power-mode-tag');
+        const isTT = (sport === 'tabletennis');
+
+        if (uiLayer) uiLayer.classList.toggle('sport-tabletennis', isTT);
+        if (hitLabel) hitLabel.innerText = isTT ? 'UP' : 'HIT';
+        if (cutBtn) cutBtn.style.display = isTT ? 'flex' : 'none';
+        if (modeTag) {
+            modeTag.innerText = isTT ? 'DRIVE' : 'SMASH';
+            modeTag.classList.remove('is-cut');
+        }
+    },
+
+    updatePowerBar(percent, chargeMode = 'up', sport = 'badminton') {
         const fill = document.getElementById('power-fill');
         const meter = document.getElementById('power-meter');
+        const modeTag = document.getElementById('power-mode-tag');
+        const isTT = (sport === 'tabletennis');
+        const isCut = (isTT && chargeMode === 'down');
+
         if (fill) fill.style.width = `${percent}%`;
         if (meter) {
-            meter.classList.toggle('smash-ready', percent >= 50);
+            meter.classList.toggle('cut-mode', isCut);
+            meter.classList.toggle('smash-ready', !isCut && percent >= 50);
+            meter.classList.toggle('cut-ready', isCut && percent >= 50);
             meter.classList.toggle('max-power', percent >= 95);
+        }
+        if (modeTag) {
+            modeTag.innerText = isTT ? (isCut ? 'CUT' : 'DRIVE') : 'SMASH';
+            modeTag.classList.toggle('is-cut', isCut);
         }
     }
 };

@@ -619,21 +619,15 @@ const EnvironmentManager = {
             const cone = new THREE.Mesh(lightConeGeo, lightConeMat);
             cone.position.set(x, 7.4, z);
             group.add(cone);
-
-            const spotLight = new THREE.SpotLight(theme.spotLightColor, 0.35);
-            spotLight.position.set(x, 14.7, z);
-            spotLight.target.position.set(x, 0, z);
-            spotLight.angle = Math.PI / 4;
-            spotLight.penumbra = 0.8;
-            spotLight.distance = 26;
-            group.add(spotLight);
-            group.add(spotLight.target);
         };
 
         setupCeilingLight(-halfW + 1.2, -halfL + 2.5);
         setupCeilingLight(halfW - 1.2, -halfL + 2.5);
         setupCeilingLight(-halfW + 1.2, halfL - 2.5);
         setupCeilingLight(halfW - 1.2, halfL - 2.5);
+
+        const arenaHemiLight = new THREE.HemisphereLight(theme.spotLightColor, theme.wallColor, 0.30);
+        group.add(arenaHemiLight);
     },
 
     // -----------------------------------------------------
