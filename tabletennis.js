@@ -99,6 +99,7 @@ const TableTennisGame = {
     _tmpVec3B: new THREE.Vector3(),
     _tmpVec3C: new THREE.Vector3(),
     _tmpVec3D: new THREE.Vector3(),
+    _tmpVelOut: new THREE.Vector3(),
     _tmpPrevBallPos: new THREE.Vector3(),
     _predPos: new THREE.Vector3(),
     _predVel: new THREE.Vector3(),
@@ -699,7 +700,7 @@ const TableTennisGame = {
             vz = dz / duration;
         }
         const vy = (dy - 0.5 * totalGravity * duration * duration) / duration;
-        return new THREE.Vector3(vx, vy, vz);
+        return this._tmpVelOut.set(vx, vy, vz);
     },
 
     resetTossArm(group) {
@@ -1385,12 +1386,12 @@ const TableTennisGame = {
                     this.chargeSparkTimer = 0;
                     const angle = Math.random() * Math.PI * 2;
                     const rad = 0.35 + Math.random() * 0.5;
-                    const p = new THREE.Vector3(
+                    this._tmpVec3D.set(
                         this.playerGroup.position.x + Math.cos(angle) * rad,
                         0.12,
                         this.playerGroup.position.z + Math.sin(angle) * rad
                     );
-                    this.core.spawnSparks(p, power >= 50 ? 0x00d8ff : 0x8ef5ff, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
+                    this.core.spawnSparks(this._tmpVec3D, power >= 50 ? 0x00d8ff : 0x8ef5ff, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
                 }
             } else if (power >= 50) {
                 this.chargeRing.visible = true;
@@ -1404,12 +1405,12 @@ const TableTennisGame = {
                     this.chargeSparkTimer = 0;
                     const angle = Math.random() * Math.PI * 2;
                     const rad = 0.35 + Math.random() * 0.5;
-                    const p = new THREE.Vector3(
+                    this._tmpVec3D.set(
                         this.playerGroup.position.x + Math.cos(angle) * rad,
                         0.12,
                         this.playerGroup.position.z + Math.sin(angle) * rad
                     );
-                    this.core.spawnSparks(p, power >= 95 ? 0xff4500 : 0xffd700, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
+                    this.core.spawnSparks(this._tmpVec3D, power >= 95 ? 0xff4500 : 0xffd700, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
                 }
             } else {
                 this.chargeRing.visible = false;
