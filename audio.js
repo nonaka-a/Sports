@@ -84,6 +84,10 @@ const BadmintonAudio = {
                 gainNode.gain.value = volume;
                 source.connect(gainNode);
                 gainNode.connect(ctx.destination);
+                source.onended = () => {
+                    source.disconnect();
+                    gainNode.disconnect();
+                };
                 source.start(0);
                 return;
             } catch (e) {
@@ -132,32 +136,36 @@ const BadmintonAudio = {
 
         // iOS / iPad Safari 対応のオーディオアンロック処理
         const unlock = () => {
+            if (this.isUnlocked) return;
             const ctx = this.getContext();
             if (ctx) {
                 if (ctx.state === 'suspended') {
                     ctx.resume().catch(() => {});
                 }
-                if (!this.isUnlocked) {
-                    try {
-                        const silentBuf = ctx.createBuffer(1, 1, 22050);
-                        const src = ctx.createBufferSource();
-                        src.buffer = silentBuf;
-                        src.connect(ctx.destination);
-                        src.start(0);
-                    } catch (e) {
-                        // 無視
-                    }
-                    // まだデコードされていないSEがあれば再試行
-                    allPaths.forEach(path => {
-                        if (!this.buffers[path]) this.loadSoundBuffer(path);
-                    });
+                try {
+                    const silentBuf = ctx.createBuffer(1, 1, 22050);
+                    const src = ctx.createBufferSource();
+                    src.buffer = silentBuf;
+                    src.connect(ctx.destination);
+                    src.onended = () => src.disconnect();
+                    src.start(0);
+                } catch (e) {
+                    // 無視
                 }
+                allPaths.forEach(path => {
+                    if (!this.buffers[path]) this.loadSoundBuffer(path);
+                });
             }
             this.isUnlocked = true;
 
             if (!this.isMuted && this.bgm && this.bgm.paused) {
                 this.bgm.play().catch(e => console.warn("BGM play error on unlock:", e));
             }
+
+            window.removeEventListener('touchstart', unlock);
+            window.removeEventListener('touchend', unlock);
+            window.removeEventListener('mousedown', unlock);
+            window.removeEventListener('keydown', unlock);
         };
 
         window.addEventListener('touchstart', unlock, { passive: true });

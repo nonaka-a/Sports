@@ -1,6 +1,12 @@
 const UIManager = {
     isPaused: false,
     callbacks: null,
+    _powerFillEl: null,
+    _powerMeterEl: null,
+    _powerModeTagEl: null,
+    _lastPowerPercent: -1,
+    _lastPowerIsCut: null,
+    _lastPowerSport: null,
 
     init(callbacks) {
         this.callbacks = callbacks;
@@ -232,22 +238,37 @@ const UIManager = {
     },
 
     updatePowerBar(percent, chargeMode = 'up', sport = 'badminton') {
-        const fill = document.getElementById('power-fill');
-        const meter = document.getElementById('power-meter');
-        const modeTag = document.getElementById('power-mode-tag');
         const isTT = (sport === 'tabletennis');
         const isCut = (isTT && chargeMode === 'down');
 
-        if (fill) fill.style.width = `${percent}%`;
+        if (this._lastPowerPercent === percent && this._lastPowerIsCut === isCut && this._lastPowerSport === sport) {
+            return;
+        }
+
+        if (!this._powerFillEl) this._powerFillEl = document.getElementById('power-fill');
+        if (!this._powerMeterEl) this._powerMeterEl = document.getElementById('power-meter');
+        if (!this._powerModeTagEl) this._powerModeTagEl = document.getElementById('power-mode-tag');
+
+        const fill = this._powerFillEl;
+        const meter = this._powerMeterEl;
+        const modeTag = this._powerModeTagEl;
+
+        if (fill && this._lastPowerPercent !== percent) {
+            fill.style.width = `${percent}%`;
+        }
         if (meter) {
             meter.classList.toggle('cut-mode', isCut);
             meter.classList.toggle('smash-ready', !isCut && percent >= 50);
             meter.classList.toggle('cut-ready', isCut && percent >= 50);
             meter.classList.toggle('max-power', percent >= 95);
         }
-        if (modeTag) {
+        if (modeTag && (this._lastPowerIsCut !== isCut || this._lastPowerSport !== sport)) {
             modeTag.innerText = isTT ? (isCut ? 'CUT' : 'DRIVE') : 'SMASH';
             modeTag.classList.toggle('is-cut', isCut);
         }
+
+        this._lastPowerPercent = percent;
+        this._lastPowerIsCut = isCut;
+        this._lastPowerSport = sport;
     }
 };

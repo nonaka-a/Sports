@@ -26,6 +26,8 @@ const FloatingJoystick = {
             dpadZone.style.pointerEvents = 'none';
             dpadZone.querySelectorAll('.dpad-btn').forEach(btn => {
                 btn.style.pointerEvents = 'none';
+                btn.style.backdropFilter = 'none';
+                btn.style.webkitBackdropFilter = 'none';
             });
         }
 

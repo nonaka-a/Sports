@@ -21,10 +21,17 @@ const PlayerManager = {
     // 反応遅延（リアクション）用タイマー (NPC)
     npcReactionTimer: 0,
 
+    // GC抑制用再利用ベクトル
+    _tmpV2A: new THREE.Vector2(),
+    _tmpV2B: new THREE.Vector2(),
+    _tmpPredPos: new THREE.Vector3(),
+    _tmpPredVel: new THREE.Vector3(),
+    _tmpPredDir: new THREE.Vector3(),
+
     checkShuttleInRange(playerPos, playerJumpY, shuttlePos, radius) {
-        const flatPlayer = new THREE.Vector2(playerPos.x, playerPos.z);
-        const flatShuttle = new THREE.Vector2(shuttlePos.x, shuttlePos.z);
-        const dist2D = flatPlayer.distanceTo(flatShuttle);
+        this._tmpV2A.set(playerPos.x, playerPos.z);
+        this._tmpV2B.set(shuttlePos.x, shuttlePos.z);
+        const dist2D = this._tmpV2A.distanceTo(this._tmpV2B);
         
         if (dist2D > radius) return false;
         
@@ -165,9 +172,9 @@ const PlayerManager = {
 
         // レベル3およびレベルMAX：チャージ・ジャンプスマッシュ用事前トリガー
         if ((npcLevel === 3 || npcLevel === 4) && shuttlePhys.vel.z < 0 && !this.npcIsJumping) {
-            const flatNpc = new THREE.Vector2(npcGroup.position.x, npcGroup.position.z);
-            const flatShuttle = new THREE.Vector2(shuttlePhys.pos.x, shuttlePhys.pos.z);
-            const dist2D = flatNpc.distanceTo(flatShuttle);
+            this._tmpV2A.set(npcGroup.position.x, npcGroup.position.z);
+            this._tmpV2B.set(shuttlePhys.pos.x, shuttlePhys.pos.z);
+            const dist2D = this._tmpV2A.distanceTo(this._tmpV2B);
 
             // 各レベル固有の反応遅延時間を超過しているか確認
             const requiredDelay = (npcLevel === 3) ? 0.38 : 0.22;
@@ -196,14 +203,16 @@ const PlayerManager = {
     },
 
     predictLandingPoint(pos, vel, gravity, airDrag, targetY) {
-        const p = pos.clone();
-        const v = vel.clone();
+        const p = this._tmpPredPos.copy(pos);
+        const v = this._tmpPredVel.copy(vel);
+        const dir = this._tmpPredDir;
         const simStep = 0.05;
         for (let i = 0; i < 80; i++) {
             v.y += gravity * simStep;
             const sp = v.length();
             if (sp > 0.01) {
-                v.sub(v.clone().normalize().multiplyScalar(Math.min(airDrag * sp * simStep, sp)));
+                dir.copy(v).normalize().multiplyScalar(Math.min(airDrag * sp * simStep, sp));
+                v.sub(dir);
             }
             p.addScaledVector(v, simStep);
             if (p.y <= targetY) {

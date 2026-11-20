@@ -734,7 +734,6 @@ html, body {
     width: 0%;
     height: 100%;
     background: linear-gradient(90deg, #34c759, #ffd700);
-    transition: width 0.04s linear;
 }
 
 #power-meter.smash-ready #power-fill {

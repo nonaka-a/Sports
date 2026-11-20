@@ -592,7 +592,7 @@ const EnvironmentManager = {
             group.add(beam);
         });
 
-        // 競技用天井LEDスポットライト
+        // 競技用天井LEDスポットライト（GPU負荷軽減のためメッシュ表現のみ維持しSpotLight計算を省略）
         const fixtureGeo = new THREE.BoxGeometry(1.2, 0.25, 0.8);
         const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 });
         const emitterGeo = new THREE.PlaneGeometry(1.0, 0.6);
@@ -625,9 +625,6 @@ const EnvironmentManager = {
         setupCeilingLight(halfW - 1.2, -halfL + 2.5);
         setupCeilingLight(-halfW + 1.2, halfL - 2.5);
         setupCeilingLight(halfW - 1.2, halfL - 2.5);
-
-        const arenaHemiLight = new THREE.HemisphereLight(theme.spotLightColor, theme.wallColor, 0.30);
-        group.add(arenaHemiLight);
     },
 
     // -----------------------------------------------------
@@ -641,10 +638,10 @@ const EnvironmentManager = {
         scene.background = new THREE.Color(0x1f2d24);
         scene.fog = new THREE.FogExp2(0x1f2d24, 0.009);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.05);
         group.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xfffdf5, 0.45);
+        const dirLight = new THREE.DirectionalLight(0xfffdf5, 0.55);
         dirLight.position.set(10, 25, 12);
         group.add(dirLight);
 
@@ -728,10 +725,10 @@ const EnvironmentManager = {
         scene.background = new THREE.Color(0xd98fa0);
         scene.fog = new THREE.FogExp2(0xd98fa0, 0.008);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.08);
         group.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xfff5f8, 0.42);
+        const dirLight = new THREE.DirectionalLight(0xfff5f8, 0.52);
         dirLight.position.set(10, 25, 12);
         group.add(dirLight);
 
@@ -778,7 +775,7 @@ const EnvironmentManager = {
             group.add(heart);
         });
 
-       if (!options.isTableTennis) {
+        if (!options.isTableTennis) {
             this.buildCourtLines(group, courtWidth, courtLength);
             this.buildNet(group, courtWidth, netHeight, 0xffffff, 0xff69b4, '#ff1493');
         }
