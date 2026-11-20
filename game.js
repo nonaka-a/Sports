@@ -106,8 +106,12 @@ const GameCore = {
                     this.selectedSport = sport;
                 },
                 onBackToTitle: () => {
+                    if (typeof TTNetwork !== 'undefined') {
+                        TTNetwork.disconnect();
+                    }
                     UIManager.toggleSettings(false);
                     UIManager.hideResult();
+                    UIManager.setOpponentLabel('NPC');
                     UIManager.showStartScreen(true);
                     isCharging = false;
                     power = 0;
@@ -139,8 +143,8 @@ const GameCore = {
                     }
                     gameState = 'waiting';
                 },
-                onPauseToggle: (isPaused) => {
-                    if (isPaused) {
+                onPauseToggle: (isPaused, isMenuOpen) => {
+                    if (isPaused || isMenuOpen) {
                         isCharging = false;
                         power = 0;
                         chargeMode = 'up';
@@ -154,6 +158,7 @@ const GameCore = {
         }
 
         this.initInputs();
+        this.initOnlineButtons();
 
         const finalStartBtn = document.getElementById('final-start-btn');
         if (finalStartBtn) {
@@ -214,6 +219,120 @@ const GameCore = {
         window.addEventListener('resize', () => this.onResize());
 
         this.animate();
+    },
+
+    initOnlineButtons() {
+        const createBtn = document.getElementById('online-create-btn');
+        const joinBtn = document.getElementById('online-join-btn');
+        const joinInput = document.getElementById('online-join-input');
+        const roomBox = document.getElementById('online-room-box');
+        const roomIdText = document.getElementById('online-room-id-text');
+
+        const handleDisconnect = () => {
+            if (typeof TableTennisGame !== 'undefined') {
+                TableTennisGame.onlineMode = false;
+            }
+            const resultScreen = document.getElementById('result-screen');
+            const isResultShown = resultScreen && resultScreen.style.display !== 'none';
+            if (gameState !== 'waiting' && !isResultShown) {
+                gameState = 'ended';
+                isCharging = false;
+                power = 0;
+                if (typeof FloatingJoystick !== 'undefined') FloatingJoystick.reset();
+                if (typeof UIManager !== 'undefined') {
+                    UIManager.toggleSettings(false);
+                    UIManager.showResult(playerScore, npcScore, '相手が切断しました');
+                }
+            } else if (gameState === 'waiting' && typeof UIManager !== 'undefined') {
+                UIManager.resetOnlinePanelUI();
+                UIManager.setOnlineStatus('接続が切断されました。', true);
+            }
+        };
+
+        const handleIncomingData = (data) => {
+            if (!data || !data.t) return;
+            if (data.t === 'match_start') {
+                courtType = data.courtType || 'gym';
+                this.launchOnlineTableTennis('guest', courtType);
+                return;
+            }
+            if (typeof TableTennisGame !== 'undefined') {
+                TableTennisGame.handleNetworkData(data);
+            }
+        };
+
+        if (createBtn) {
+            createBtn.addEventListener('click', () => {
+                if (typeof TTNetwork === 'undefined') return;
+                createBtn.disabled = true;
+                UIManager.setOnlineStatus('ルームIDを発行しています...');
+                TTNetwork.createRoom({
+                    onRoomCreated: (roomId) => {
+                        if (roomIdText) roomIdText.innerText = roomId;
+                        if (roomBox) roomBox.style.display = 'block';
+                        UIManager.setOnlineStatus('相手の参加を待っています...');
+                    },
+                    onConnected: () => {
+                        const activeCourtBtn = document.querySelector('.court-opt.active');
+                        const selectedCourt = activeCourtBtn ? activeCourtBtn.dataset.court : 'gym';
+                        courtType = selectedCourt;
+                        TTNetwork.send('match_start', { courtType: selectedCourt });
+                        this.launchOnlineTableTennis('host', selectedCourt);
+                    },
+                    onData: handleIncomingData,
+                    onDisconnected: handleDisconnect,
+                    onError: (msg) => {
+                        createBtn.disabled = false;
+                        if (roomBox) roomBox.style.display = 'none';
+                        UIManager.setOnlineStatus(msg, true);
+                    }
+                });
+            });
+        }
+
+        if (joinBtn) {
+            const doJoin = () => {
+                if (typeof TTNetwork === 'undefined') return;
+                const code = joinInput ? joinInput.value : '';
+                joinBtn.disabled = true;
+                UIManager.setOnlineStatus('接続中...');
+                TTNetwork.joinRoom(code, {
+                    onConnected: () => {
+                        UIManager.setOnlineStatus('接続完了！試合を開始します...');
+                    },
+                    onData: handleIncomingData,
+                    onDisconnected: handleDisconnect,
+                    onError: (msg) => {
+                        joinBtn.disabled = false;
+                        UIManager.setOnlineStatus(msg, true);
+                    }
+                });
+            };
+            joinBtn.addEventListener('click', doJoin);
+            if (joinInput) {
+                joinInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') doJoin();
+                });
+            }
+        }
+    },
+
+    launchOnlineTableTennis(role, selectedCourt) {
+        if (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.setBGMByLevel === 'function') {
+            BadmintonAudio.setBGMByLevel(1);
+        }
+        this.activeSport = 'tabletennis';
+        this.selectedSport = 'tabletennis';
+        if (typeof UIManager !== 'undefined') {
+            UIManager.setSportUI('tabletennis');
+            UIManager.updatePowerBar(0, 'up', 'tabletennis');
+            UIManager.showStartScreen(false);
+        }
+        this.setBadmintonVisibility(false);
+        this.resetShuttleTrail();
+        if (typeof TableTennisGame !== 'undefined') {
+            TableTennisGame.startOnlineMatch(role, selectedCourt);
+        }
     },
 
     // -----------------------------------------------------
@@ -1074,7 +1193,8 @@ const GameCore = {
     },
 
     startCharging(mode = 'up') {
-        if (gameState === 'ended' || gameState === 'waiting' || (typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
+        if (gameState === 'ended' || gameState === 'waiting') return;
+        if (typeof UIManager !== 'undefined' && (UIManager.isPaused || UIManager.isMenuOpen)) return;
         if (isCharging) return;
         chargeMode = (this.activeSport === 'tabletennis' && mode === 'down') ? 'down' : 'up';
         isCharging = true;
@@ -1370,7 +1490,8 @@ const GameCore = {
     update(dt) {
         if (dt > 0.1) dt = 0.1;
         this.idleTime += dt;
-        if (gameState === 'waiting' || (typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
+        const isOnlineMatch = (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined' && TableTennisGame.onlineMode);
+        if (gameState === 'waiting' || (!isOnlineMatch && typeof UIManager !== 'undefined' && UIManager.isPaused)) return;
         if (this.activeSport === 'tabletennis' && typeof TableTennisGame !== 'undefined') {
             TableTennisGame.update(dt);
             return;

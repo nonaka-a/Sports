@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
     <title>GO!GO! SPORTS - Table Tennis & Badminton</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Three.js -->
+    <!-- Three.js & PeerJS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div id="canvas-container"></div>
@@ -65,7 +66,15 @@
         <div id="game-setup-zone" style="display: none;">
             <div class="setup-header">MATCH SETUP</div>
 
-            <div class="setup-group">
+            <div class="setup-group" id="playmode-setup-group" style="display: none;">
+                <div class="setup-label">PLAY MODE</div>
+                <div class="playmode-select-container">
+                    <button class="setup-opt-btn playmode-opt active" data-playmode="cpu">CPU対戦</button>
+                    <button class="setup-opt-btn playmode-opt" data-playmode="online">通信対戦</button>
+                </div>
+            </div>
+
+            <div class="setup-group" id="court-setup-group">
                 <div class="setup-label">COURT STAGE</div>
                 <div class="court-select-container">
                     <button class="setup-opt-btn court-opt active" data-court="gym">
@@ -77,7 +86,7 @@
                 </div>
             </div>
 
-            <div class="setup-group">
+            <div class="setup-group" id="level-setup-group">
                 <div class="setup-label">NPC LEVEL</div>
                 <div class="level-select-container">
                     <button class="setup-opt-btn level-opt active" data-level="1">LV.1</button>
@@ -87,12 +96,38 @@
                 </div>
             </div>
 
-            <div class="setup-group">
+            <div class="setup-group" id="point-setup-group">
                 <div class="setup-label">MATCH POINT</div>
                 <div class="point-select-container">
                     <button class="setup-opt-btn point-opt" data-point="10">10 PTS</button>
                     <button class="setup-opt-btn point-opt active" data-point="21">21 PTS</button>
                 </div>
+            </div>
+
+            <!-- 通信対戦セットアップパネル（卓球・通信対戦選択時のみ表示） -->
+            <div id="online-setup-panel" style="display: none;">
+                <div class="online-tab-container">
+                    <button type="button" class="setup-opt-btn online-tab-btn active" data-onlinetab="host">部屋を作る (ID発行)</button>
+                    <button type="button" class="setup-opt-btn online-tab-btn" data-onlinetab="guest">部屋に入る (ID入力)</button>
+                </div>
+
+                <div id="online-host-pane" class="online-pane">
+                    <button type="button" id="online-create-btn" class="online-action-btn">IDを発行して待機</button>
+                    <div id="online-room-box" style="display: none;">
+                        <div class="online-room-label">ROOM ID</div>
+                        <div class="online-room-row">
+                            <span id="online-room-id-text">------</span>
+                            <button type="button" id="online-copy-btn" class="online-copy-btn">コピー</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="online-guest-pane" class="online-pane" style="display: none;">
+                    <input type="text" id="online-join-input" maxlength="6" placeholder="6桁のIDを入力" autocomplete="off" spellcheck="false">
+                    <button type="button" id="online-join-btn" class="online-action-btn join">接続して対戦</button>
+                </div>
+
+                <div id="online-status-text" class="online-status-text"></div>
             </div>
 
             <div class="setup-actions">
@@ -110,7 +145,7 @@
             <div class="result-score-box">
                 <span class="result-side side-player">YOU</span>
                 <div id="result-score">21 - 15</div>
-                <span class="result-side side-npc">NPC</span>
+                <span class="result-side side-npc" id="result-opponent-label">NPC</span>
             </div>
             <button id="result-back-to-title" class="menu-btn">タイトルへ戻る</button>
         </div>
@@ -129,7 +164,7 @@
             <div class="score-divider">VS</div>
             <div class="score-box" id="npc-score-box">
                 <div class="score-info">
-                    <div class="score-label">NPC</div>
+                    <div class="score-label" id="npc-score-label">NPC</div>
                     <div class="score-value" id="npc-score">0</div>
                 </div>
                 <div class="score-team-bar bar-npc"></div>
@@ -193,6 +228,7 @@
     <script src="ui.js"></script>
     <script src="joystick.js"></script>
     <script src="tt_character.js"></script>
+    <script src="tt_network.js"></script>
     <script src="tabletennis.js"></script>
     <script src="game.js"></script>
 </body>

@@ -87,14 +87,14 @@ const FloatingJoystick = {
     canActivate(clientX, target) {
         const uiLayer = document.getElementById('ui-layer');
         if (!uiLayer || uiLayer.style.display === 'none') return false;
-        if (typeof UIManager !== 'undefined' && UIManager.isPaused) return false;
+        if (typeof UIManager !== 'undefined' && (UIManager.isPaused || UIManager.isMenuOpen)) return false;
         if (typeof gameState !== 'undefined' && (gameState === 'waiting' || gameState === 'ended')) return false;
 
         // 画面の左半分のみ反応
         if (clientX > window.innerWidth * 0.5) return false;
 
         // ボタン・スコアボード・メニュー上の操作は除外
-        if (target && target.closest('#settings-btn, #hit-button, #scoreboard, #settings-menu, #start-screen, #result-screen')) {
+        if (target && target.closest('#settings-btn, #hit-button, #cut-button, #scoreboard, #settings-menu, #start-screen, #result-screen')) {
             return false;
         }
         return true;
