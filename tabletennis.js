@@ -157,17 +157,23 @@ const TableTennisGame = {
     playBounceSound(isPaddle = false) {
         if (typeof BadmintonAudio !== 'undefined' && BadmintonAudio.isMuted) return;
         try {
-            if (!this.audioCtx) {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (!AudioCtx) return;
-                this.audioCtx = new AudioCtx();
+            let ctx = (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.getContext === 'function')
+                ? BadmintonAudio.getContext()
+                : null;
+            if (!ctx) {
+                if (!this.audioCtx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    this.audioCtx = new AudioCtx();
+                }
+                ctx = this.audioCtx;
             }
-            if (this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume();
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
             }
-            const now = this.audioCtx.currentTime;
-            const osc = this.audioCtx.createOscillator();
-            const gain = this.audioCtx.createGain();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
 
             osc.type = 'sine';
             const startFreq = isPaddle ? 950 : 1280;
@@ -179,7 +185,7 @@ const TableTennisGame = {
             gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
 
             osc.connect(gain);
-            gain.connect(this.audioCtx.destination);
+            gain.connect(ctx.destination);
             osc.start(now);
             osc.stop(now + 0.06);
         } catch (e) {

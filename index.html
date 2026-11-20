@@ -11,6 +11,11 @@
 <body>
     <div id="canvas-container"></div>
 
+    <!-- 設定ボタン（全画面共通・右上） -->
+    <div id="settings-btn" title="Pause / Settings">
+        <img src="images/haguruma.png" alt="Settings">
+    </div>
+
     <!-- 設定メニュー（一時停止） -->
     <div id="settings-menu" style="display: none;">
         <div class="menu-content">
@@ -113,11 +118,6 @@
 
     <!-- プレイ中UI -->
     <div id="ui-layer" style="display: none;">
-        <!-- 設定ボタンを ui-layer 内に配置 -->
-        <div id="settings-btn" title="Pause / Settings">
-            <img src="images/haguruma.png" alt="Settings">
-        </div>
-        
         <div id="scoreboard">
             <div class="score-box" id="player-score-box">
                 <div class="score-team-bar bar-player"></div>

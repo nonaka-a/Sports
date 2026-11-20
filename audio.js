@@ -1,13 +1,17 @@
 const BadmintonAudio = {
-    hitSound: null,
-    smashSounds: [],
-    cheerSounds: [],
+    ctx: null,
+    isUnlocked: false,
+    buffers: {},
+    fallbackPools: {},
+    fallbackIndex: {},
+    smashPaths: ['sounds/Hit1.mp3', 'sounds/hit2.mp3', 'sounds/hit3.mp3'],
+    cheerPaths: ['sounds/kansei1.mp3', 'sounds/kansei2.mp3'],
+    softHitPath: 'sounds/hit_soft1.mp3',
     bgm: null,
     bgmTracks: {},
     currentBgmKey: 'default',
     _isMuted: false,
 
-    // 既存の UI 側の properties 直接参照を維持しつつ、BGMの再生制御を連動
     get isMuted() {
         return this._isMuted;
     },
@@ -22,24 +26,92 @@ const BadmintonAudio = {
         }
     },
 
-    init() {
-        // 効果音の初期化
-        this.hitSound = new Audio('sounds/hit_soft1.mp3');
-        this.hitSound.preload = 'auto';
-        
-        const fileNames = ['sounds/Hit1.mp3', 'sounds/hit2.mp3', 'sounds/hit3.mp3'];
-        this.smashSounds = fileNames.map(path => {
-            const audio = new Audio(path);
-            audio.preload = 'auto';
-            return audio;
-        });
+    getContext() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                this.ctx = new AudioCtx();
+            }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+        }
+        return this.ctx;
+    },
 
-        // 歓声（歓声1, 歓声2）の初期化
-        const cheerNames = ['sounds/kansei1.mp3', 'sounds/kansei2.mp3'];
-        this.cheerSounds = cheerNames.map(path => {
-            const audio = new Audio(path);
-            audio.preload = 'auto';
-            return audio;
+    createFallbackPool(path, poolSize = 4) {
+        const pool = [];
+        for (let i = 0; i < poolSize; i++) {
+            const a = new Audio(path);
+            a.preload = 'auto';
+            pool.push(a);
+        }
+        this.fallbackPools[path] = pool;
+        this.fallbackIndex[path] = 0;
+    },
+
+    loadSoundBuffer(path) {
+        const ctx = this.getContext();
+        if (!ctx || typeof fetch !== 'function') return;
+
+        fetch(path)
+            .then(res => {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.arrayBuffer();
+            })
+            .then(arr => new Promise((resolve, reject) => {
+                const p = ctx.decodeAudioData(arr, resolve, reject);
+                if (p && typeof p.then === 'function') p.then(resolve, reject);
+            }))
+            .then(buf => {
+                this.buffers[path] = buf;
+            })
+            .catch(() => {
+                // file:// 等で fetch/decode に失敗した場合はフォールバックプールを使用
+            });
+    },
+
+    playBufferOrFallback(path, volume = 1.0) {
+        if (this.isMuted) return;
+
+        const ctx = this.getContext();
+        const buf = this.buffers[path];
+        if (ctx && buf) {
+            try {
+                const source = ctx.createBufferSource();
+                source.buffer = buf;
+                const gainNode = ctx.createGain();
+                gainNode.gain.value = volume;
+                source.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                source.start(0);
+                return;
+            } catch (e) {
+                // フォールバックへ
+            }
+        }
+
+        const pool = this.fallbackPools[path];
+        if (pool && pool.length > 0) {
+            const idx = this.fallbackIndex[path] || 0;
+            this.fallbackIndex[path] = (idx + 1) % pool.length;
+            const audio = pool[idx];
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = volume;
+                audio.play().catch(() => {});
+            } catch (err) {
+                // 無視
+            }
+        }
+    },
+
+    init() {
+        const allPaths = [this.softHitPath, ...this.smashPaths, ...this.cheerPaths];
+        allPaths.forEach(path => {
+            this.createFallbackPool(path, 4);
+            this.loadSoundBuffer(path);
         });
 
         // BGM の初期化 (通常: BGM.mp3 / LV.2-3: BGM2.mp3 / LV.MAX: BGM3.mp3)
@@ -57,45 +129,58 @@ const BadmintonAudio = {
         });
         this.currentBgmKey = 'default';
         this.bgm = this.bgmTracks.default;
-        
-        // 初回画面インタラクション時にブラウザのオーディオ制限を解除
+
+        // iOS / iPad Safari 対応のオーディオアンロック処理
         const unlock = () => {
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            if (context.state === 'suspended') context.resume();
-            
-            // ミュート状態でなければBGMの再生をここで開始
-            if (!this.isMuted && this.bgm) {
+            const ctx = this.getContext();
+            if (ctx) {
+                if (ctx.state === 'suspended') {
+                    ctx.resume().catch(() => {});
+                }
+                if (!this.isUnlocked) {
+                    try {
+                        const silentBuf = ctx.createBuffer(1, 1, 22050);
+                        const src = ctx.createBufferSource();
+                        src.buffer = silentBuf;
+                        src.connect(ctx.destination);
+                        src.start(0);
+                    } catch (e) {
+                        // 無視
+                    }
+                    // まだデコードされていないSEがあれば再試行
+                    allPaths.forEach(path => {
+                        if (!this.buffers[path]) this.loadSoundBuffer(path);
+                    });
+                }
+            }
+            this.isUnlocked = true;
+
+            if (!this.isMuted && this.bgm && this.bgm.paused) {
                 this.bgm.play().catch(e => console.warn("BGM play error on unlock:", e));
             }
-
-            window.removeEventListener('touchstart', unlock);
-            window.removeEventListener('click', unlock);
         };
-        window.addEventListener('touchstart', unlock);
-        window.addEventListener('click', unlock);
+
+        window.addEventListener('touchstart', unlock, { passive: true });
+        window.addEventListener('touchend', unlock, { passive: true });
+        window.addEventListener('mousedown', unlock, { passive: true });
+        window.addEventListener('keydown', unlock, { passive: true });
     },
 
     playHit(isSmash = false) {
         if (this.isMuted) return;
-        
-        let sound;
+
+        let path;
         if (isSmash) {
-            if (this.smashSounds.length > 0) {
-                const idx = Math.floor(Math.random() * this.smashSounds.length);
-                sound = this.smashSounds[idx];
+            if (this.smashPaths.length > 0) {
+                const idx = Math.floor(Math.random() * this.smashPaths.length);
+                path = this.smashPaths[idx];
             }
         } else {
-            sound = this.hitSound;
+            path = this.softHitPath;
         }
-        
-        if (!sound) return;
-        try {
-            const clone = sound.cloneNode();
-            clone.volume = isSmash ? 1.0 : 0.85;
-            clone.play().catch(e => console.warn("Audio play error:", e));
-        } catch (err) {
-            console.warn("Audio error:", err);
-        }
+
+        if (!path) return;
+        this.playBufferOrFallback(path, isSmash ? 1.0 : 0.85);
     },
 
     setBGMByLevel(level) {
@@ -127,19 +212,11 @@ const BadmintonAudio = {
         }
     },
 
-    // 歓声のランダム再生用メソッド
     playCheer() {
         if (this.isMuted) return;
-        if (this.cheerSounds.length > 0) {
-            const idx = Math.floor(Math.random() * this.cheerSounds.length);
-            const sound = this.cheerSounds[idx];
-            try {
-                const clone = sound.cloneNode();
-                clone.volume = 0.75; // 歓声の音量をやや抑えめに調整
-                clone.play().catch(e => console.warn("Cheer play error:", e));
-            } catch (err) {
-                console.warn("Cheer clone play error:", err);
-            }
+        if (this.cheerPaths.length > 0) {
+            const idx = Math.floor(Math.random() * this.cheerPaths.length);
+            this.playBufferOrFallback(this.cheerPaths[idx], 0.75);
         }
     }
 };

@@ -129,11 +129,25 @@ const UIManager = {
     },
 
     toggleSettings(show) {
-        this.isPaused = show;
+        const isWaiting = (typeof gameState !== 'undefined' && gameState === 'waiting');
+        this.isPaused = show && !isWaiting;
+
         const menu = document.getElementById('settings-menu');
-        if (menu) menu.style.display = show ? 'flex' : 'none';
+        if (menu) {
+            const tag = menu.querySelector('.panel-header-tag');
+            const title = menu.querySelector('h2');
+            const resumeBtn = document.getElementById('resume-btn');
+            const backBtn = document.getElementById('menu-back-to-title');
+
+            if (tag) tag.innerText = isWaiting ? 'SYSTEM SETTINGS' : 'MATCH PAUSED';
+            if (title) title.innerText = isWaiting ? 'SETTINGS' : 'PAUSED';
+            if (resumeBtn) resumeBtn.innerText = isWaiting ? '閉じる' : '試合を再開';
+            if (backBtn) backBtn.style.display = isWaiting ? 'none' : 'block';
+
+            menu.style.display = show ? 'flex' : 'none';
+        }
         if (this.callbacks && typeof this.callbacks.onPauseToggle === 'function') {
-            this.callbacks.onPauseToggle(show);
+            this.callbacks.onPauseToggle(this.isPaused);
         }
     },
 
