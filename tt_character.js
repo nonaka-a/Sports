@@ -356,6 +356,43 @@ const TableTennisCharacter = {
         }
     },
 
+    applyServeHoldPose(bodyMesh) {
+        const rig = bodyMesh && bodyMesh.userData ? bodyMesh.userData.rig : null;
+        if (!rig) return;
+        bodyMesh.position.y = 0;
+        bodyMesh.rotation.z = 0;
+        rig.pelvisGroup.position.y = rig.basePelvisY - 0.04;
+        rig.torsoGroup.rotation.set(0.30, -0.72, 0);
+        rig.headGroup.rotation.set(-0.24, 0.62, 0);
+        rig.leftLeg.hipGroup.rotation.set(-0.42, 0, 0.16);
+        rig.leftLeg.kneeGroup.rotation.set(0.62, 0, 0);
+        rig.leftLeg.ankleGroup.rotation.set(-0.20, 0, -0.16);
+        rig.rightLeg.hipGroup.rotation.set(-0.18, 0, -0.18);
+        rig.rightLeg.kneeGroup.rotation.set(0.48, 0, 0);
+        rig.rightLeg.ankleGroup.rotation.set(-0.30, 0, 0.18);
+        rig.rightArm.shoulderGroup.rotation.set(-0.15, -0.15, -0.45);
+        rig.rightArm.elbowGroup.rotation.set(-1.15, 0, 0.25);
+        rig.rightArm.wristGroup.rotation.set(-0.10, 0, 0);
+        rig.leftArm.shoulderGroup.rotation.set(-0.62, 0.18, 0.15);
+        rig.leftArm.elbowGroup.rotation.set(-1.25, 0, -0.22);
+        if (rig.rightArm.swingArc) {
+            rig.rightArm.swingArc.visible = false;
+            rig.rightArm.swingArc.material.opacity = 0;
+        }
+    },
+
+    getLeftHandWorldPosition(bodyMesh, outVec) {
+        const rig = bodyMesh && bodyMesh.userData ? bodyMesh.userData.rig : null;
+        if (!rig || !rig.leftArm || !rig.leftArm.wristGroup) return false;
+        if (bodyMesh.parent) {
+            bodyMesh.parent.updateMatrixWorld(true);
+        } else {
+            bodyMesh.updateMatrixWorld(true);
+        }
+        rig.leftArm.wristGroup.getWorldPosition(outVec);
+        return true;
+    },
+
     updateAnimation(bodyMesh, state, dt) {
         if (!bodyMesh || !bodyMesh.userData) {
             return { swingTime: state ? state.swingTime : -1, stepPhase: state ? state.stepPhase : 0 };
@@ -380,6 +417,8 @@ const TableTennisCharacter = {
             recoveryTime,
             idleTime
         } = state;
+        const emotion = state.emotion || 'none';
+        const emotionTime = state.emotionTime || 0;
 
         let swingTime = state.swingTime;
         let stepPhase = state.stepPhase;
@@ -391,8 +430,13 @@ const TableTennisCharacter = {
         const localVz = isPlayer ? -vz : vz;
         const localDiveDir = isPlayer ? -diveDir : diveDir;
 
-        // 1. 飛びつきジャンプ全体の位置・傾き
-        if (diveTime >= 0) {
+        // 1. 飛びつきジャンプ・勝利ジャンプ全体の位置・傾き
+        if (emotion === 'win') {
+            const bounceFade = Math.max(0, 1 - emotionTime * 0.25);
+            const jumpArc = Math.abs(Math.sin(emotionTime * 7.5)) * 0.34 * bounceFade;
+            bodyMesh.position.y += (jumpArc - bodyMesh.position.y) * Math.min(1, 18 * dt);
+            bodyMesh.rotation.z += (0 - bodyMesh.rotation.z) * factor;
+        } else if (diveTime >= 0) {
             const t = Math.min(1, diveTime / diveDuration);
             const arc = Math.sin(t * Math.PI);
             bodyMesh.position.y = arc * 0.45;
@@ -402,11 +446,30 @@ const TableTennisCharacter = {
             bodyMesh.rotation.z += (0 - bodyMesh.rotation.z) * factor;
         }
 
-        // 2. 下半身（膝曲げレディスタンス＋サイドステップ）
-        let pelvisDrop = isCharging ? 0.045 : (recoveryTime > 0 ? 0.05 : 0.025);
+        // 2. 下半身（得点演出・サーブスタンス・膝曲げレディスタンス＋サイドステップ）
+        let pelvisDrop = isCharging ? 0.045 : (recoveryTime > 0 ? 0.05 : (armMode === 'hold' ? 0.04 : 0.025));
         let stepBounce = 0;
 
-        if (diveTime >= 0) {
+        if (emotion === 'win') {
+            pelvisDrop = 0.015;
+            const cheerKick = Math.abs(Math.sin(emotionTime * 7.5)) * 0.18;
+            this.lerpAngle(rig.leftLeg.hipGroup, -0.22 - cheerKick, 0, 0.18, factor);
+            this.lerpAngle(rig.leftLeg.kneeGroup, 0.42 + cheerKick * 1.4, 0, 0, factor);
+            this.lerpAngle(rig.leftLeg.ankleGroup, -0.20, 0, -0.18, factor);
+
+            this.lerpAngle(rig.rightLeg.hipGroup, -0.22 - cheerKick, 0, -0.18, factor);
+            this.lerpAngle(rig.rightLeg.kneeGroup, 0.42 + cheerKick * 1.4, 0, 0, factor);
+            this.lerpAngle(rig.rightLeg.ankleGroup, -0.20, 0, 0.18, factor);
+        } else if (emotion === 'lose') {
+            pelvisDrop = 0.10;
+            this.lerpAngle(rig.leftLeg.hipGroup, -0.52, 0, 0.14, factor);
+            this.lerpAngle(rig.leftLeg.kneeGroup, 1.02, 0, 0, factor);
+            this.lerpAngle(rig.leftLeg.ankleGroup, -0.50, 0, -0.14, factor);
+
+            this.lerpAngle(rig.rightLeg.hipGroup, -0.52, 0, -0.14, factor);
+            this.lerpAngle(rig.rightLeg.kneeGroup, 1.02, 0, 0, factor);
+            this.lerpAngle(rig.rightLeg.ankleGroup, -0.50, 0, 0.14, factor);
+        } else if (diveTime >= 0) {
             this.lerpAngle(rig.leftLeg.hipGroup, -0.22, 0, localDiveDir > 0 ? 0.48 : 0.12, factor);
             this.lerpAngle(rig.leftLeg.kneeGroup, 0.42, 0, 0, factor);
             this.lerpAngle(rig.leftLeg.ankleGroup, -0.20, 0, 0, factor);
@@ -435,6 +498,14 @@ const TableTennisCharacter = {
             this.lerpAngle(rig.rightLeg.hipGroup, rHipX, 0, rHipZ, factor);
             this.lerpAngle(rig.rightLeg.kneeGroup, rKnee, 0, 0, factor);
             this.lerpAngle(rig.rightLeg.ankleGroup, -(rHipX + rKnee), 0, -rHipZ, factor);
+        } else if (armMode === 'hold') {
+            this.lerpAngle(rig.leftLeg.hipGroup, -0.42, 0, 0.16, factor);
+            this.lerpAngle(rig.leftLeg.kneeGroup, 0.62, 0, 0, factor);
+            this.lerpAngle(rig.leftLeg.ankleGroup, -0.20, 0, -0.16, factor);
+
+            this.lerpAngle(rig.rightLeg.hipGroup, -0.18, 0, -0.18, factor);
+            this.lerpAngle(rig.rightLeg.kneeGroup, 0.48, 0, 0, factor);
+            this.lerpAngle(rig.rightLeg.ankleGroup, -0.30, 0, 0.18, factor);
         } else {
             const idleKnee = 0.54 + Math.sin(idleTime * 3.4) * 0.04;
             const idleHipX = -idleKnee * 0.5;
@@ -449,17 +520,49 @@ const TableTennisCharacter = {
 
         rig.pelvisGroup.position.y += (rig.basePelvisY - pelvisDrop + stepBounce - rig.pelvisGroup.position.y) * factor;
 
-        // 3. 上半身（前傾・腰のひねり）と右腕スイング
+        // 3. 上半身（前傾・腰のひねり）と右腕スイング・感情演出
         let targetTorsoX = 0.24 + (isCharging ? 0.08 : 0);
         let targetTorsoY = 0;
         let targetTorsoZ = Math.max(-0.14, Math.min(0.14, -localVx * 0.03));
+        let targetHeadX = null;
+        let targetHeadY = null;
+        let targetHeadZ = null;
 
         let rShX = -0.35, rShY = 0, rShZ = -0.25;
         let rElX = -1.15, rElY = 0, rElZ = 0.25;
         let rWrX = 0, rWrY = 0, rWrZ = 0;
         let arcOpacity = 0;
 
-        if (diveTime >= 0) {
+        if (emotion === 'win') {
+            const pump = Math.sin(emotionTime * 15.0) * 0.14;
+            targetTorsoX = -0.10;
+            targetTorsoY = Math.sin(emotionTime * 5.0) * 0.14;
+            targetTorsoZ = 0;
+            targetHeadX = -0.18;
+            targetHeadY = 0;
+            targetHeadZ = 0;
+            rShX = -2.35 + pump;
+            rShY = 0.12;
+            rShZ = -0.45;
+            rElX = -0.42;
+            rElZ = 0.10;
+            rWrX = -0.15;
+            swingTime = -1;
+        } else if (emotion === 'lose') {
+            targetTorsoX = 0.62;
+            targetTorsoY = 0;
+            targetTorsoZ = 0;
+            targetHeadX = 0.36;
+            targetHeadY = Math.sin(emotionTime * 5.2) * 0.20;
+            targetHeadZ = 0;
+            rShX = 0.32;
+            rShY = 0;
+            rShZ = -0.16;
+            rElX = -0.22;
+            rElZ = 0.08;
+            rWrX = 0.15;
+            swingTime = -1;
+        } else if (diveTime >= 0) {
             const stretchRight = localDiveDir < 0;
             targetTorsoX = 0.34;
             targetTorsoY = stretchRight ? -0.32 : 0.32;
@@ -541,6 +644,19 @@ const TableTennisCharacter = {
                 rElZ = 0.15;
                 rWrX = -0.12;
             }
+        } else if (armMode === 'hold') {
+            // サーブ待機（半身構え）
+            const sway = Math.sin(idleTime * 3.0) * 0.02;
+            targetTorsoX = 0.30;
+            targetTorsoY = -0.72;
+            targetHeadX = -0.24;
+            targetHeadY = 0.62;
+            rShX = -0.15 + sway;
+            rShY = -0.15;
+            rShZ = -0.45;
+            rElX = -1.15;
+            rElZ = 0.25;
+            rWrX = -0.10;
         } else {
             // 待機レディポジション
             const sway = Math.sin(idleTime * 3.4) * 0.04;
@@ -550,9 +666,15 @@ const TableTennisCharacter = {
             rElZ = 0.25;
         }
 
-        const swingFactor = swingTime >= 0 ? Math.min(1, 26 * dt) : factor;
+        const swingFactor = (swingTime >= 0 && emotion === 'none') ? Math.min(1, 26 * dt) : factor;
         this.lerpAngle(rig.torsoGroup, targetTorsoX, targetTorsoY, targetTorsoZ, swingFactor);
-        this.lerpAngle(rig.headGroup, -targetTorsoX * 0.82, -targetTorsoY * 0.45, -targetTorsoZ * 0.5, swingFactor);
+        this.lerpAngle(
+            rig.headGroup,
+            targetHeadX !== null ? targetHeadX : -targetTorsoX * 0.82,
+            targetHeadY !== null ? targetHeadY : -targetTorsoY * 0.45,
+            targetHeadZ !== null ? targetHeadZ : -targetTorsoZ * 0.5,
+            swingFactor
+        );
 
         this.lerpAngle(rig.rightArm.shoulderGroup, rShX, rShY, rShZ, swingFactor);
         this.lerpAngle(rig.rightArm.elbowGroup, rElX, rElY, rElZ, swingFactor);
@@ -563,24 +685,37 @@ const TableTennisCharacter = {
             rig.rightArm.swingArc.material.opacity = arcOpacity;
         }
 
-        // 4. 左腕（トス動作・飛びつきバランス・通常構え）
-        let lShX = -0.35, lShZ = 0.25;
+        // 4. 左腕（得点演出・サーブボール保持・トス動作・飛びつきバランス・通常構え）
+        let lShX = -0.35, lShY = 0, lShZ = 0.25;
         let lElX = -0.95, lElZ = -0.15;
 
-        if (diveTime >= 0) {
+        if (emotion === 'win') {
+            const pump = Math.sin(emotionTime * 15.0 + 0.6) * 0.14;
+            lShX = -1.75 + pump;
+            lShZ = 0.55;
+            lElX = -1.35;
+            lElZ = -0.15;
+        } else if (emotion === 'lose') {
+            lShX = 0.32;
+            lShZ = 0.16;
+            lElX = -0.22;
+            lElZ = -0.08;
+        } else if (diveTime >= 0) {
             const stretchLeft = localDiveDir > 0;
             lShX = -0.65;
             lShZ = stretchLeft ? 0.95 : -0.25;
             lElX = -0.35;
         } else if (armMode === 'hold') {
-            lShX = -0.65;
-            lShZ = 0.12;
-            lElX = -0.85;
-            lElZ = -0.25;
+            lShX = -0.62;
+            lShY = 0.18;
+            lShZ = 0.15;
+            lElX = -1.25;
+            lElZ = -0.22;
         } else if (armMode === 'toss') {
-            lShX = -2.15;
-            lShZ = 0.18;
-            lElX = -0.25;
+            lShX = -2.25;
+            lShY = 0.10;
+            lShZ = 0.14;
+            lElX = -0.20;
             lElZ = 0;
         } else if (swingTime >= 0 && hitType === 'fore') {
             lShX = -0.45;
@@ -592,7 +727,7 @@ const TableTennisCharacter = {
             lElX = -0.95;
         }
 
-        this.lerpAngle(rig.leftArm.shoulderGroup, lShX, 0, lShZ, factor);
+        this.lerpAngle(rig.leftArm.shoulderGroup, lShX, lShY, lShZ, factor);
         this.lerpAngle(rig.leftArm.elbowGroup, lElX, 0, lElZ, factor);
 
         rig.animResult.swingTime = swingTime;

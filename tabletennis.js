@@ -88,7 +88,7 @@ const TableTennisGame = {
     serveNextBounceY: 0.82,
     serveNextBounceZ: 0.97,
 
-    // アニメーション・バックハンド・飛びつき・カメラ用
+    // アニメーション・バックハンド・飛びつき・感情表現・カメラ用
     playerSwingTime: -1,
     npcSwingTime: -1,
     playerHitType: 'fore',
@@ -99,6 +99,9 @@ const TableTennisGame = {
     npcDiveTime: -1,
     npcDiveDir: 0,
     npcRecoveryTime: 0,
+    playerEmotion: 'none',
+    npcEmotion: 'none',
+    emotionTime: 0,
     diveDuration: 0.40,
     recoveryDuration: 0.55,
     prevPlayerPos: new THREE.Vector3(0, 0, 3.8),
@@ -130,7 +133,8 @@ const TableTennisGame = {
     _animState: {
         isPlayer: true, vx: 0, vz: 0, isCharging: false, chargeMode: 'up', chargeRatio: 0,
         swingTime: -1, stepPhase: 0, hitType: 'fore', armMode: 'none',
-        diveTime: -1, diveDuration: 0.40, diveDir: 0, recoveryTime: 0, idleTime: 0
+        diveTime: -1, diveDuration: 0.40, diveDir: 0, recoveryTime: 0, idleTime: 0,
+        emotion: 'none', emotionTime: 0
     },
 
     // WebAudio ピンポン音用コンテキスト
@@ -179,18 +183,25 @@ const TableTennisGame = {
     resetTitlePreview() {
         this.onlineMode = false;
         this.onlineRole = null;
+        this.playerEmotion = 'none';
+        this.npcEmotion = 'none';
+        this.emotionTime = 0;
         this.setCharacterColors(false);
         if (this.playerGroup) {
             this.playerGroup.position.set(0, 0, 3.8);
             this.prevPlayerPos.copy(this.playerGroup.position);
-            TableTennisCharacter.resetPose(this.activePlayerBody);
+            TableTennisCharacter.applyServeHoldPose(this.activePlayerBody);
         }
         if (this.npcGroup) {
             this.npcGroup.position.set(0, 0, -3.8);
             this.prevNpcPos.copy(this.npcGroup.position);
             TableTennisCharacter.resetPose(this.activeNpcBody);
         }
-        this.ballPos.set(-0.34, 1.18, 3.40);
+        if (this.activePlayerBody && TableTennisCharacter.getLeftHandWorldPosition(this.activePlayerBody, this._tmpVec3A)) {
+            this.ballPos.set(this._tmpVec3A.x, this._tmpVec3A.y + 0.095, this._tmpVec3A.z);
+        } else {
+            this.ballPos.set(-0.34, 1.18, 3.40);
+        }
         if (this.ballGroup) this.ballGroup.position.copy(this.ballPos);
         if (this.ballShadow) this.ballShadow.position.set(this.ballPos.x, 0.025, this.ballPos.z);
         this.resetTrail();
@@ -767,8 +778,9 @@ const TableTennisGame = {
         this.npcDiveTime = -1;
         this.npcDiveDir = 0;
         this.npcRecoveryTime = 0;
-        TableTennisCharacter.resetPose(this.activePlayerBody);
-        TableTennisCharacter.resetPose(this.activeNpcBody);
+        this.playerEmotion = 'none';
+        this.npcEmotion = 'none';
+        this.emotionTime = 0;
         this.resetTrail();
 
         power = 0;
@@ -802,14 +814,26 @@ const TableTennisGame = {
             this.lastHitter = 'player';
             this.playerCanHit = true;
             this.npcCanHit = false;
-            this.ballPos.set(this.playerGroup.position.x - 0.34, 1.18, this.playerGroup.position.z - 0.40);
+            TableTennisCharacter.applyServeHoldPose(this.activePlayerBody);
+            TableTennisCharacter.resetPose(this.activeNpcBody);
+            if (TableTennisCharacter.getLeftHandWorldPosition(this.activePlayerBody, this._tmpVec3A)) {
+                this.ballPos.set(this._tmpVec3A.x, this._tmpVec3A.y + 0.095, this._tmpVec3A.z);
+            } else {
+                this.ballPos.set(this.playerGroup.position.x - 0.34, 1.18, this.playerGroup.position.z - 0.40);
+            }
             this.ballVel.set(0, 0, 0);
         } else {
             gameState = 'serve-npc';
             this.lastHitter = 'npc';
             this.playerCanHit = false;
             this.npcCanHit = true;
-            this.ballPos.set(this.npcGroup.position.x + 0.34, 1.18, this.npcGroup.position.z + 0.40);
+            TableTennisCharacter.resetPose(this.activePlayerBody);
+            TableTennisCharacter.applyServeHoldPose(this.activeNpcBody);
+            if (TableTennisCharacter.getLeftHandWorldPosition(this.activeNpcBody, this._tmpVec3A)) {
+                this.ballPos.set(this._tmpVec3A.x, this._tmpVec3A.y + 0.095, this._tmpVec3A.z);
+            } else {
+                this.ballPos.set(this.npcGroup.position.x + 0.34, 1.18, this.npcGroup.position.z + 0.40);
+            }
             this.ballVel.set(0, 0, 0);
         }
     },
@@ -1478,6 +1502,10 @@ const TableTennisGame = {
         if (nEl) nEl.innerText = npcScore;
 
         const youWonPoint = (data.winner === 'guest');
+        this.playerEmotion = youWonPoint ? 'win' : 'lose';
+        this.npcEmotion = youWonPoint ? 'lose' : 'win';
+        this.emotionTime = 0;
+
         const prefix = data.prefix ? `${data.prefix} ` : '';
         const bannerText = youWonPoint ? `${prefix}POINT FOR YOU!` : `${prefix}POINT FOR RIVAL!`;
         this.core.showBanner(bannerText, youWonPoint ? "#34c759" : "#ff3b30");
@@ -1729,6 +1757,10 @@ const TableTennisGame = {
             BadmintonAudio.playCheer();
         }
 
+        this.playerEmotion = (winner === 'player') ? 'win' : 'lose';
+        this.npcEmotion = (winner === 'player') ? 'lose' : 'win';
+        this.emotionTime = 0;
+
         const oppName = this.onlineMode ? 'RIVAL' : 'NPC';
         if (winner === 'player') {
             playerScore++;
@@ -1828,8 +1860,11 @@ const TableTennisGame = {
     update(dt) {
         const menuBlockingInput = (typeof UIManager !== 'undefined' && UIManager.isMenuOpen);
         const isPlayerTossing = (gameState === 'serve-player' && this.servePhase === 'toss');
+        const isPointEnded = (gameState === 'ended');
 
-        if (this.playerDiveTime >= 0) {
+        if (isPointEnded) {
+            this.emotionTime += dt;
+        } else if (this.playerDiveTime >= 0) {
             this.playerGroup.position.x += this.playerDiveDir * 2.6 * dt;
             this.playerGroup.position.x = Math.max(-this.limitX, Math.min(this.limitX, this.playerGroup.position.x));
         } else if (!isPlayerTossing && !menuBlockingInput) {
@@ -1863,7 +1898,6 @@ const TableTennisGame = {
         if (gameState === 'serve-player') {
             if (this.servePhase !== 'toss') {
                 this.servePhase = 'idle';
-                this.ballPos.set(this.playerGroup.position.x - 0.34, 1.18, this.playerGroup.position.z - 0.40);
                 this.ballVel.set(0, 0, 0);
                 if (isCharging) {
                     this.servePhase = 'toss';
@@ -1880,8 +1914,9 @@ const TableTennisGame = {
                 this.serveTossVelY += this.gravity * dt;
                 this.ballPos.y += this.serveTossVelY * dt;
                 const targetBallX = this.playerGroup.position.x + 0.14;
+                const targetBallZ = this.playerGroup.position.z - 0.42;
                 this.ballPos.x += (targetBallX - this.ballPos.x) * 3.5 * dt;
-                this.ballPos.z = this.playerGroup.position.z - 0.40;
+                this.ballPos.z += (targetBallZ - this.ballPos.z) * 5.0 * dt;
 
                 if (this.serveTossVelY < 0 && this.ballPos.y <= 1.25) {
                     this.serveBall('player', power, chargeMode);
@@ -1895,7 +1930,6 @@ const TableTennisGame = {
         } else if (gameState === 'serve-npc') {
             if (this.servePhase !== 'toss') {
                 this.servePhase = 'idle';
-                this.ballPos.set(this.npcGroup.position.x + 0.34, 1.18, this.npcGroup.position.z + 0.40);
                 this.ballVel.set(0, 0, 0);
                 if (!this.onlineMode) {
                     this.npcTossDelayTimer += dt;
@@ -1910,8 +1944,9 @@ const TableTennisGame = {
                 this.serveTossVelY += this.gravity * dt;
                 this.ballPos.y += this.serveTossVelY * dt;
                 const targetBallX = this.npcGroup.position.x - 0.14;
+                const targetBallZ = this.npcGroup.position.z + 0.42;
                 this.ballPos.x += (targetBallX - this.ballPos.x) * 3.5 * dt;
-                this.ballPos.z = this.npcGroup.position.z + 0.40;
+                this.ballPos.z += (targetBallZ - this.ballPos.z) * 5.0 * dt;
 
                 if (!this.onlineMode && this.serveTossVelY < 0 && this.ballPos.y <= 1.35) {
                     const npcServePower = (npcLevel >= 3 && Math.random() < 0.55) ? (60 + Math.random() * 35) : 30;
@@ -1948,7 +1983,9 @@ const TableTennisGame = {
         }
 
         // NPCまたはオンライン相手の位置更新
-        this.updateNPC(dt);
+        if (!isPointEnded) {
+            this.updateNPC(dt);
+        }
 
         // ラリー物理更新
         if (gameState === 'rally') {
@@ -2116,11 +2153,6 @@ const TableTennisGame = {
             }
         }
 
-        // ボールと影の更新
-        this.ballGroup.position.copy(this.ballPos);
-        const overTable = Math.abs(this.ballPos.x) <= this.tableWidth / 2 && Math.abs(this.ballPos.z) <= this.tableLength / 2;
-        this.ballShadow.position.set(this.ballPos.x, overTable ? this.tableHeight + 0.012 : 0.025, this.ballPos.z);
-
         // チャージVFX・トレイル・VFX更新
         this.updateChargeVFX(dt);
         this.updateTrail(gameState === 'rally');
@@ -2182,6 +2214,8 @@ const TableTennisGame = {
         st.diveDir = this.playerDiveDir;
         st.recoveryTime = this.playerRecoveryTime;
         st.idleTime = this.core ? this.core.idleTime : 0;
+        st.emotion = isPointEnded ? this.playerEmotion : 'none';
+        st.emotionTime = this.emotionTime;
 
         if (playerBodyMesh) {
             const pAnimRes = TableTennisCharacter.updateAnimation(
@@ -2214,6 +2248,8 @@ const TableTennisGame = {
         st.diveTime = this.npcDiveTime;
         st.diveDir = this.npcDiveDir;
         st.recoveryTime = this.npcRecoveryTime;
+        st.emotion = isPointEnded ? this.npcEmotion : 'none';
+        st.emotionTime = this.emotionTime;
 
         if (npcBodyMesh) {
             const nAnimRes = TableTennisCharacter.updateAnimation(
@@ -2226,6 +2262,19 @@ const TableTennisGame = {
                 this.npcStepPhase = nAnimRes.stepPhase;
             }
         }
+
+        // サーブ待機時は左手のひらのワールド座標にボールを追従させる
+        if ((gameState === 'serve-player' || gameState === 'serve-npc') && this.servePhase === 'idle') {
+            const serverBody = (gameState === 'serve-player') ? this.activePlayerBody : this.activeNpcBody;
+            if (serverBody && TableTennisCharacter.getLeftHandWorldPosition(serverBody, this._tmpVec3A)) {
+                this.ballPos.set(this._tmpVec3A.x, this._tmpVec3A.y + 0.095, this._tmpVec3A.z);
+            }
+        }
+
+        // ボールと影の更新
+        this.ballGroup.position.copy(this.ballPos);
+        const overTable = Math.abs(this.ballPos.x) <= this.tableWidth / 2 && Math.abs(this.ballPos.z) <= this.tableLength / 2;
+        this.ballShadow.position.set(this.ballPos.x, overTable ? this.tableHeight + 0.012 : 0.025, this.ballPos.z);
 
         // カメラ追従＆シェイク
         this.cameraBasePos.x += (this.playerGroup.position.x * 0.48 - this.cameraBasePos.x) * 4.5 * dt;
