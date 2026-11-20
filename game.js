@@ -5,7 +5,7 @@ let isCharging = false;
 let chargeMode = 'up';
 let power = 0;
 const MAX_POWER = 100;
-const POWER_CHARGE_SPEED = 2.5;
+const POWER_CHARGE_SPEED = 150;
 
 let playerScore = 0;
 let npcScore = 0;
@@ -1523,7 +1523,7 @@ const GameCore = {
         PlayerManager.movePlayer(this.playerGroup, keys, joyDir, joyActive, isCharging, dt);
 
         if (isCharging) {
-            power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
+            power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED * dt);
             if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power, chargeMode, this.activeSport);
             if (gameState === 'rally' && PlayerManager.playerHasHitRight && this.shuttlePhys.vel.z > 0 && this.shuttlePhys.pos.z > -1.5) {
                 this._tmpVec2A.set(this.playerGroup.position.x, this.playerGroup.position.z);

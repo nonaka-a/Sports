@@ -906,21 +906,21 @@ const TableTennisGame = {
                 this.serveDestX = (aimDir !== 0 ? aimDir : curveDir) * (0.35 + cutRatio * 0.65);
                 this.serveDestZ = -(1.35 + cutRatio * 0.45);
                 this.serveFlightDuration = 0.54 + cutRatio * 0.08;
-                this.serveFlightSpin = 1.2 + cutRatio * 2.4;
+                this.serveFlightSpin = 1.0 + cutRatio * 2.0;
                 this.serveFlightHorizDrag = cutRatio * 0.55;
                 this.serveFlightCurveX = curveDir * (cutRatio * 3.0);
-                this.serveNextBounceY = 0.80 - cutRatio * 0.20;
-                this.serveNextBounceZ = 0.90 - cutRatio * 0.20;
+                this.serveNextBounceY = 0.92 - cutRatio * 0.10;
+                this.serveNextBounceZ = 0.90 - cutRatio * 0.16;
                 this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.24, 0));
             } else if (isLongServe) {
                 const firstZ = 2.10 + pRatio * 0.25;
                 this.serveDestX = aimDir !== 0 ? aimDir * (1.15 + pRatio * 0.32) : (Math.random() - 0.5) * 0.45;
                 this.serveDestZ = -(2.15 + pRatio * 0.42);
-                this.serveFlightDuration = 0.42 - pRatio * 0.05;
-                this.serveFlightSpin = -6.0 - pRatio * 4.0;
-                this.serveNextBounceY = 0.72;
-                this.serveNextBounceZ = 1.10 + pRatio * 0.08;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.22, 0));
+                this.serveFlightDuration = 0.50 - pRatio * 0.05;
+                this.serveFlightSpin = -4.5 - pRatio * 3.0;
+                this.serveNextBounceY = 0.75;
+                this.serveNextBounceZ = 1.06 + pRatio * 0.06;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.26, 0));
             } else {
                 const firstZ = 1.15 + Math.random() * 0.15;
                 this.serveDestX = aimDir !== 0 ? aimDir * 1.05 : (Math.random() - 0.5) * 0.35;
@@ -968,11 +968,11 @@ const TableTennisGame = {
                 const firstZ = -(2.10 + pRatio * 0.25);
                 this.serveDestX = aimDir !== 0 ? aimDir * (1.10 + pRatio * 0.25) : (Math.random() - 0.5) * 0.6;
                 this.serveDestZ = 2.10 + pRatio * 0.35;
-                this.serveFlightDuration = 0.44 - pRatio * 0.04;
-                this.serveFlightSpin = -6.0 - pRatio * 3.0;
-                this.serveNextBounceY = 0.74;
-                this.serveNextBounceZ = 1.08;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.23, 0));
+                this.serveFlightDuration = 0.51 - pRatio * 0.04;
+                this.serveFlightSpin = -4.5 - pRatio * 2.5;
+                this.serveNextBounceY = 0.76;
+                this.serveNextBounceZ = 1.05;
+                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.26, 0));
             } else {
                 const firstZ = -(1.15 + Math.random() * 0.15);
                 this.serveDestX = aimDir !== 0 ? aimDir * 0.95 : (Math.random() - 0.5) * 0.5;
@@ -1932,7 +1932,7 @@ const TableTennisGame = {
 
         // チャージ更新＆自動ヒット（ワンバウンド後）
         if (isCharging && !menuBlockingInput) {
-            power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED);
+            power = Math.min(MAX_POWER, power + POWER_CHARGE_SPEED * dt);
             if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(power, chargeMode, 'tabletennis');
 
             if (gameState === 'rally' && this.playerCanHit && this.receiverBounces === 1 && this.ballPos.z > 0.2) {
