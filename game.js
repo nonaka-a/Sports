@@ -112,6 +112,7 @@ const GameCore = {
                     UIManager.toggleSettings(false);
                     UIManager.hideResult();
                     UIManager.setOpponentLabel('NPC');
+                    UIManager.setTeamColors(false);
                     UIManager.showStartScreen(true);
                     isCharging = false;
                     power = 0;

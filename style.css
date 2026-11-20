@@ -751,6 +751,34 @@ html, body {
     color: #3a96ff;
 }
 
+#scoreboard.is-guest-colors .bar-player {
+    background: #007aff;
+    box-shadow: 0 0 12px rgba(0, 122, 255, 0.7);
+}
+
+#scoreboard.is-guest-colors .bar-npc {
+    background: #ff3b30;
+    box-shadow: 0 0 12px rgba(255, 59, 48, 0.7);
+}
+
+#scoreboard.is-guest-colors #player-score-box .score-value {
+    color: #3a96ff;
+}
+
+#scoreboard.is-guest-colors #npc-score-box .score-value {
+    color: #ff574d;
+}
+
+.result-score-box.is-guest-colors .side-player {
+    background: rgba(0, 122, 255, 0.22);
+    color: #5ac8fa;
+}
+
+.result-score-box.is-guest-colors .side-npc {
+    background: rgba(255, 59, 48, 0.22);
+    color: #ff6961;
+}
+
 .score-divider {
     display: flex;
     align-items: center;

@@ -251,6 +251,13 @@ const UIManager = {
         if (resultOppLabel) resultOppLabel.innerText = labelText;
     },
 
+    setTeamColors(playerIsBlue) {
+        const scoreboard = document.getElementById('scoreboard');
+        const resultScoreBox = document.querySelector('.result-score-box');
+        if (scoreboard) scoreboard.classList.toggle('is-guest-colors', Boolean(playerIsBlue));
+        if (resultScoreBox) resultScoreBox.classList.toggle('is-guest-colors', Boolean(playerIsBlue));
+    },
+
     toggleSettings(show) {
         const isWaiting = (typeof gameState !== 'undefined' && gameState === 'waiting');
         const isOnlineMatch = (typeof TTNetwork !== 'undefined' && TTNetwork.isOnline);

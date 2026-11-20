@@ -171,6 +171,9 @@ const TableTennisGame = {
             this.activeNpcBody = playerIsBlue ? this.npcBodies.red : this.npcBodies.blue;
             TableTennisCharacter.resetPose(this.activeNpcBody);
         }
+        if (typeof UIManager !== 'undefined' && typeof UIManager.setTeamColors === 'function') {
+            UIManager.setTeamColors(playerIsBlue);
+        }
     },
 
     resetTitlePreview() {
