@@ -52,6 +52,7 @@ const TableTennisGame = {
     isServeFirstBounce: false,
     isShortServeActive: false,
     netFault: false,
+    incomingCutMissProb: 0,
     playerCanHit: true,
     npcCanHit: false,
     npcReactionTimer: 0,
@@ -207,451 +208,59 @@ const TableTennisGame = {
         this.resetTrail();
     },
 
-    // 卓球専用の軽い「ポンッ」というバウンド音を生成（ミュート連動）
+    // TTVisual への委譲ラッパー
     playBounceSound(isPaddle = false) {
-        if (typeof BadmintonAudio !== 'undefined' && BadmintonAudio.isMuted) return;
-        try {
-            let ctx = (typeof BadmintonAudio !== 'undefined' && typeof BadmintonAudio.getContext === 'function')
-                ? BadmintonAudio.getContext()
-                : null;
-            if (!ctx) {
-                if (!this.audioCtx) {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (!AudioCtx) return;
-                    this.audioCtx = new AudioCtx();
-                }
-                ctx = this.audioCtx;
-            }
-            if (ctx.state === 'suspended') {
-                ctx.resume().catch(() => {});
-            }
-            const now = ctx.currentTime;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc.type = 'sine';
-            const startFreq = isPaddle ? 950 : 1280;
-            const endFreq = isPaddle ? 420 : 680;
-            osc.frequency.setValueAtTime(startFreq, now);
-            osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.045);
-
-            gain.gain.setValueAtTime(isPaddle ? 0.22 : 0.16, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
-
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.06);
-        } catch (e) {
-            // Audioエラーは無視
-        }
+        TTVisual.playBounceSound(this, isPaddle);
     },
-
     buildTable() {
-        const w = this.tableWidth;
-        const l = this.tableLength;
-        const h = this.tableHeight;
-        const topThickness = 0.1;
-
-        const tableGroup = new THREE.Group();
-
-        // 天板（深緑〜ネイビーブルーの競技用卓球台カラー）
-        const topGeo = new THREE.BoxGeometry(w, topThickness, l);
-        const topMat = new THREE.MeshStandardMaterial({
-            color: 0x0e3b6e,
-            roughness: 0.35,
-            metalness: 0.08
-        });
-        const topMesh = new THREE.Mesh(topGeo, topMat);
-        topMesh.position.set(0, h - topThickness / 2, 0);
-        tableGroup.add(topMesh);
-
-        // 天板の白枠線・センターライン
-        const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const lineY = h + 0.004;
-        const lw = 0.04;
-
-        const sideLineGeo = new THREE.PlaneGeometry(lw, l);
-        [-w / 2 + lw / 2, w / 2 - lw / 2].forEach(lx => {
-            const sl = new THREE.Mesh(sideLineGeo, lineMat);
-            sl.rotation.x = -Math.PI / 2;
-            sl.position.set(lx, lineY, 0);
-            tableGroup.add(sl);
-        });
-
-        const endLineGeo = new THREE.PlaneGeometry(w, lw);
-        [-l / 2 + lw / 2, l / 2 - lw / 2].forEach(lz => {
-            const el = new THREE.Mesh(endLineGeo, lineMat);
-            el.rotation.x = -Math.PI / 2;
-            el.position.set(0, lineY, lz);
-            tableGroup.add(el);
-        });
-
-        const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.02, l), lineMat);
-        centerLine.rotation.x = -Math.PI / 2;
-        centerLine.position.set(0, lineY, 0);
-        tableGroup.add(centerLine);
-
-        // 側面フレーム（ブラック）
-        const apronMat = new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.5 });
-        const apron = new THREE.Mesh(new THREE.BoxGeometry(w - 0.14, 0.14, l - 0.14), apronMat);
-        apron.position.set(0, h - topThickness - 0.07, 0);
-        tableGroup.add(apron);
-
-        // 4本の脚と補強フレーム
-        const legMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3a, metalness: 0.6, roughness: 0.35 });
-        const legH = h - topThickness - 0.08;
-        const legGeo = new THREE.BoxGeometry(0.1, legH, 0.1);
-        const legX = w / 2 - 0.32;
-        const legZ = l / 2 - 0.45;
-        [
-            [-legX, -legZ],
-            [legX, -legZ],
-            [-legX, legZ],
-            [legX, legZ]
-        ].forEach(([lx, lz]) => {
-            const leg = new THREE.Mesh(legGeo, legMat);
-            leg.position.set(lx, legH / 2, lz);
-            tableGroup.add(leg);
-        });
-
-        // 中央の横連結フレーム
-        const barGeo = new THREE.BoxGeometry(0.08, 0.08, legZ * 2);
-        [-legX, legX].forEach(bx => {
-            const bar = new THREE.Mesh(barGeo, legMat);
-            bar.position.set(bx, 0.32, 0);
-            tableGroup.add(bar);
-        });
-
-        // 卓球ネットとサポート支柱
-        const postGeo = new THREE.CylinderGeometry(0.025, 0.025, this.netHeight + 0.04, 10);
-        const postMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.3 });
-        [-w / 2 - 0.14, w / 2 + 0.14].forEach(px => {
-            const post = new THREE.Mesh(postGeo, postMat);
-            post.position.set(px, h + this.netHeight / 2, 0);
-            tableGroup.add(post);
-        });
-
-        const netMeshGeo = new THREE.PlaneGeometry(w + 0.28, this.netHeight);
-        const netMeshMat = new THREE.MeshBasicMaterial({
-            color: 0x162230,
-            transparent: true,
-            opacity: 0.72,
-            side: THREE.DoubleSide
-        });
-        const netMesh = new THREE.Mesh(netMeshGeo, netMeshMat);
-        netMesh.position.set(0, h + this.netHeight / 2, 0);
-        tableGroup.add(netMesh);
-
-        const topTape = new THREE.Mesh(
-            new THREE.BoxGeometry(w + 0.28, 0.028, 0.015),
-            new THREE.MeshBasicMaterial({ color: 0xffffff })
-        );
-        topTape.position.set(0, h + this.netHeight - 0.014, 0);
-        tableGroup.add(topTape);
-
-        this.rootGroup.add(tableGroup);
+        TTVisual.buildTable(this);
     },
-
     createTableTennisRacket(rubberColor, accentColor) {
-        const racket = new THREE.Group();
-
-        // 木製グリップ
-        const gripGeo = new THREE.CylinderGeometry(0.024, 0.028, 0.17, 10);
-        const gripMat = new THREE.MeshStandardMaterial({ color: 0xc98f58, roughness: 0.7 });
-        const grip = new THREE.Mesh(gripGeo, gripMat);
-        grip.position.y = 0.09;
-        racket.add(grip);
-
-        // グリップ装飾ライン
-        const tapeGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.025, 10);
-        const tapeMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4 });
-        const tape = new THREE.Mesh(tapeGeo, tapeMat);
-        tape.position.y = 0.16;
-        racket.add(tape);
-
-        // ブレード（木板）
-        const bladeGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.016, 24);
-        const bladeMat = new THREE.MeshStandardMaterial({ color: 0xe3b886, roughness: 0.6 });
-        const blade = new THREE.Mesh(bladeGeo, bladeMat);
-        blade.rotation.x = Math.PI / 2;
-        blade.scale.set(0.92, 1.0, 1.06);
-        blade.position.y = 0.30;
-        racket.add(blade);
-
-        // 表面ラバー（赤・黒）
-        const rubberFrontMat = new THREE.MeshStandardMaterial({ color: rubberColor, roughness: 0.45 });
-        const rubberBackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5 });
-        const rubberGeo = new THREE.CircleGeometry(0.144, 24);
-
-        const frontRubber = new THREE.Mesh(rubberGeo, rubberFrontMat);
-        frontRubber.scale.set(0.92, 1.06, 1);
-        frontRubber.position.set(0, 0.30, 0.009);
-        racket.add(frontRubber);
-
-        const backRubber = new THREE.Mesh(rubberGeo, rubberBackMat);
-        backRubber.rotation.y = Math.PI;
-        backRubber.scale.set(0.92, 1.06, 1);
-        backRubber.position.set(0, 0.30, -0.009);
-        racket.add(backRubber);
-
-        // スイング軌跡アーク
-        const arcGeo = new THREE.RingGeometry(0.32, 0.62, 20, 1, -Math.PI * 0.35, Math.PI * 0.7);
-        const arcMat = new THREE.MeshBasicMaterial({
-            color: accentColor,
-            transparent: true,
-            opacity: 0.0,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        const swingArc = new THREE.Mesh(arcGeo, arcMat);
-        swingArc.rotation.y = Math.PI / 2;
-        swingArc.rotation.z = Math.PI * 0.25;
-        swingArc.name = "swingArc";
-        swingArc.visible = false;
-        racket.add(swingArc);
-
-        return racket;
+        return TTVisual.createTableTennisRacket(rubberColor, accentColor);
     },
-
     swapToTableTennisRacket(bodyMesh, rubberColor, accentColor) {
-        const visualRoot = bodyMesh.getObjectByName("visualRoot");
-        if (!visualRoot) return;
-        const racketArm = visualRoot.getObjectByName("racket");
-        if (!racketArm) return;
-
-        const oldRacket = racketArm.getObjectByName("racketMesh");
-        if (oldRacket) {
-            racketArm.remove(oldRacket);
-        }
-
-        const ttRacket = this.createTableTennisRacket(rubberColor, accentColor);
-        ttRacket.name = "racketMesh";
-        ttRacket.position.set(-0.11, 0.16, 0.13);
-        ttRacket.rotation.set(0.35, 0.2, 0.15);
-        racketArm.add(ttRacket);
+        TTVisual.swapToTableTennisRacket(bodyMesh, rubberColor, accentColor);
     },
-
     buildCharacters() {
-        const shadowGeo = new THREE.RingGeometry(0, 0.62, 28);
-        const shadowMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.38,
-            side: THREE.DoubleSide
-        });
-
-        const redPreset = {
-            primaryColor: 0xff3b30,
-            accentColor: 0xffd700,
-            rubberColor: 0xd92626,
-            shortsColor: 0x1c1c1e,
-            hairColor: 0x2b1d14,
-            hasCap: true
-        };
-        const bluePreset = {
-            primaryColor: 0x007aff,
-            accentColor: 0x00d4ff,
-            rubberColor: 0xd92626,
-            shortsColor: 0x182235,
-            hairColor: 0x1f242d,
-            hasCap: false
-        };
-
-        // 手前プレイヤーキャラ（赤：親/通常、青：ゲスト）
-        this.playerGroup = new THREE.Group();
-        const playerRed = TableTennisCharacter.createCharacter({ ...redPreset, faceBack: true });
-        playerRed.scale.setScalar(this.characterScale);
-        this.playerGroup.add(playerRed);
-
-        const playerBlue = TableTennisCharacter.createCharacter({ ...bluePreset, faceBack: true });
-        playerBlue.scale.setScalar(this.characterScale);
-        playerBlue.visible = false;
-        this.playerGroup.add(playerBlue);
-
-        this.playerBodies = { red: playerRed, blue: playerBlue };
-        this.activePlayerBody = playerRed;
-
-        const playerShadow = new THREE.Mesh(shadowGeo, shadowMat);
-        playerShadow.rotation.x = -Math.PI / 2;
-        playerShadow.position.y = 0.025;
-        this.playerGroup.add(playerShadow);
-
-        const chargeRingGeo = new THREE.RingGeometry(0.68, 0.84, 36);
-        const chargeRingMat = new THREE.MeshBasicMaterial({
-            color: 0x00d8ff,
-            transparent: true,
-            opacity: 0.8,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        this.chargeRing = new THREE.Mesh(chargeRingGeo, chargeRingMat);
-        this.chargeRing.rotation.x = -Math.PI / 2;
-        this.chargeRing.position.y = 0.03;
-        this.chargeRing.visible = false;
-        this.playerGroup.add(this.chargeRing);
-
-        this.playerGroup.position.set(0, 0, 3.8);
-        this.rootGroup.add(this.playerGroup);
-
-        // 奥の相手キャラ（青：ゲスト/CPU、赤：ホスト）
-        this.npcGroup = new THREE.Group();
-        const npcBlue = TableTennisCharacter.createCharacter({ ...bluePreset, faceBack: false });
-        npcBlue.scale.setScalar(this.characterScale);
-        this.npcGroup.add(npcBlue);
-
-        const npcRed = TableTennisCharacter.createCharacter({ ...redPreset, faceBack: false });
-        npcRed.scale.setScalar(this.characterScale);
-        npcRed.visible = false;
-        this.npcGroup.add(npcRed);
-
-        this.npcBodies = { red: npcRed, blue: npcBlue };
-        this.activeNpcBody = npcBlue;
-
-        const npcShadow = playerShadow.clone();
-        this.npcGroup.add(npcShadow);
-
-        this.npcGroup.position.set(0, 0, -3.8);
-        this.rootGroup.add(this.npcGroup);
+        TTVisual.buildCharacters(this);
     },
-
     buildBall() {
-        this.ballGroup = new THREE.Group();
-        const ballGeo = new THREE.SphereGeometry(this.ballRadius, 18, 18);
-        const ballMat = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            emissive: 0x222222,
-            roughness: 0.25,
-            metalness: 0.05
-        });
-        const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-        this.ballGroup.add(ballMesh);
-        this.rootGroup.add(this.ballGroup);
-
-        this.ballShadow = new THREE.Mesh(
-            new THREE.RingGeometry(0, 0.11, 24),
-            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 })
-        );
-        this.ballShadow.rotation.x = -Math.PI / 2;
-        this.ballShadow.position.y = this.tableHeight + 0.01;
-        this.rootGroup.add(this.ballShadow);
+        TTVisual.buildBall(this);
     },
-
     initTrail() {
-        this.trailPointPool = [];
-        for (let i = 0; i < this.trailMaxPoints; i++) {
-            this.trailPointPool.push(new THREE.Vector3());
-        }
-        const count = this.trailMaxPoints;
-        const positions = new Float32Array(count * 2 * 3);
-        const indices = [];
-        for (let i = 0; i < count - 1; i++) {
-            const a = i * 2;
-            const b = i * 2 + 1;
-            const c = (i + 1) * 2;
-            const d = (i + 1) * 2 + 1;
-            indices.push(a, b, c, b, d, c);
-        }
-        const trailGeo = new THREE.BufferGeometry();
-        trailGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        trailGeo.setIndex(indices);
-
-        const trailMat = new THREE.MeshBasicMaterial({
-            color: 0x80e5ff,
-            transparent: true,
-            opacity: 0.55,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        this.trailMesh = new THREE.Mesh(trailGeo, trailMat);
-        this.trailMesh.frustumCulled = false;
-        this.trailMesh.visible = false;
-        this.rootGroup.add(this.trailMesh);
+        TTVisual.initTrail(this);
     },
-
     resetTrail() {
-        while (this.trailPoints.length > 0) {
-            this.trailPointPool.push(this.trailPoints.pop());
-        }
-        this.trailIsSmash = false;
-        this.trailMode = 'normal';
-        if (this.trailMesh) this.trailMesh.visible = false;
+        TTVisual.resetTrail(this);
+    },
+    updateTrail(active) {
+        TTVisual.updateTrail(this, active);
+    },
+    updateChargeVFX(dt) {
+        TTVisual.updateChargeVFX(this, dt);
     },
 
-    updateTrail(active) {
-        if (!this.trailMesh) return;
-        if (!active) {
-            while (this.trailPoints.length > 0) {
-                this.trailPointPool.push(this.trailPoints.pop());
-            }
-            this.trailMesh.visible = false;
-            return;
-        }
-
-        let ptObj;
-        if (this.trailPoints.length >= this.trailMaxPoints) {
-            ptObj = this.trailPoints.pop();
-        } else {
-            ptObj = this.trailPointPool.pop() || new THREE.Vector3();
-        }
-        ptObj.copy(this.ballPos);
-        this.trailPoints.unshift(ptObj);
-
-        if (this.trailPoints.length < 2) {
-            this.trailMesh.visible = false;
-            return;
-        }
-
-        this.trailMesh.visible = true;
-        let trailColor = 0x99ebff;
-        let trailOpacity = 0.42;
-        let maxHalfWidth = 0.045;
-        if (this.trailMode === 'smash') {
-            trailColor = 0xff7b00;
-            trailOpacity = 0.78;
-            maxHalfWidth = 0.095;
-        } else if (this.trailMode === 'cut') {
-            trailColor = 0x00d8ff;
-            trailOpacity = 0.76;
-            maxHalfWidth = 0.088;
-        }
-        this.trailMesh.material.color.setHex(trailColor);
-        this.trailMesh.material.opacity = trailOpacity;
-        const posAttr = this.trailMesh.geometry.attributes.position;
-        const arr = posAttr.array;
-
-        const camPos = this.core.camera.position;
-        const dir = this._tmpVec3A;
-        const toCam = this._tmpVec3B;
-        const side = this._tmpVec3C;
-
-        for (let i = 0; i < this.trailMaxPoints; i++) {
-            const pt = this.trailPoints[Math.min(i, this.trailPoints.length - 1)];
-            const nextPt = this.trailPoints[Math.min(i + 1, this.trailPoints.length - 1)];
-            const prevPt = this.trailPoints[Math.max(i - 1, 0)];
-
-            dir.subVectors(prevPt, nextPt);
-            if (dir.lengthSq() < 0.00001) dir.set(0, 0, 1);
-            else dir.normalize();
-
-            toCam.subVectors(camPos, pt).normalize();
-            side.crossVectors(dir, toCam);
-            if (side.lengthSq() < 0.00001) side.set(1, 0, 0);
-            else side.normalize();
-
-            const t = i / (this.trailMaxPoints - 1);
-            const hw = (1 - t) * maxHalfWidth * (i < this.trailPoints.length ? 1 : 0);
-
-            const idx = i * 6;
-            arr[idx] = pt.x + side.x * hw;
-            arr[idx + 1] = pt.y + side.y * hw;
-            arr[idx + 2] = pt.z + side.z * hw;
-
-            arr[idx + 3] = pt.x - side.x * hw;
-            arr[idx + 4] = pt.y - side.y * hw;
-            arr[idx + 5] = pt.z - side.z * hw;
-        }
-        posAttr.needsUpdate = true;
+    // TTPhysics への委譲ラッパー
+    computeBallVelocity(start, target, duration, spinAccel = 0, horizDrag = 0, curveAccelX = 0) {
+        return TTPhysics.computeBallVelocity(this, start, target, duration, spinAccel, horizDrag, curveAccelX);
+    },
+    serveBall(server, servePower = 30, mode = 'up') {
+        TTPhysics.serveBall(this, server, servePower, mode);
+    },
+    getReachInfo(charPos, ballPos, isPlayer, maxReachXOverride = null) {
+        return TTPhysics.getReachInfo(this, charPos, ballPos, isPlayer, maxReachXOverride);
+    },
+    checkInRange(charPos, ballPos, isPlayer = true, maxReachXOverride = null) {
+        return TTPhysics.checkInRange(this, charPos, ballPos, isPlayer, maxReachXOverride);
+    },
+    hitBall(hitter, hitPower, reachInfo = null, mode = 'up') {
+        TTPhysics.hitBall(this, hitter, hitPower, reachInfo, mode);
+    },
+    updateNPC(dt) {
+        TTPhysics.updateNPC(this, dt);
+    },
+    predictBallInfo(targetZ) {
+        return TTPhysics.predictBallInfo(this, targetZ);
     },
 
     // ホスト空間 ⇔ ゲスト空間の座標変換（X/Z符号反転で両者が手前視点になる）
@@ -802,6 +411,7 @@ const TableTennisGame = {
         this.isServeFirstBounce = false;
         this.isShortServeActive = false;
         this.netFault = false;
+        this.incomingCutMissProb = 0;
         this.npcReactionTimer = 0;
         this.servePhase = 'idle';
         this.serveTossVelY = 0;
@@ -846,26 +456,6 @@ const TableTennisGame = {
         }
     },
 
-    // ターゲット地点へ指定時間 T で着弾する初速ベクトルを計算（縦スピン・水平減衰・横回転カーブ対応）
-    computeBallVelocity(start, target, duration, spinAccel = 0, horizDrag = 0, curveAccelX = 0) {
-        const totalGravity = this.gravity + spinAccel;
-        const dx = target.x - start.x;
-        const dy = target.y - start.y;
-        const dz = target.z - start.z;
-
-        let vx, vz;
-        if (horizDrag > 0.0001) {
-            const effTime = (1 - Math.exp(-horizDrag * duration)) / horizDrag;
-            vx = (dx - (curveAccelX / horizDrag) * (duration - effTime)) / effTime;
-            vz = dz / effTime;
-        } else {
-            vx = (dx - 0.5 * curveAccelX * duration * duration) / duration;
-            vz = dz / duration;
-        }
-        const vy = (dy - 0.5 * totalGravity * duration * duration) / duration;
-        return this._tmpVelOut.set(vx, vy, vz);
-    },
-
     resetTossArm(group) {
         const bodyM = group === this.playerGroup ? this.activePlayerBody : (group === this.npcGroup ? this.activeNpcBody : null);
         const visualRoot = bodyM ? bodyM.getObjectByName("visualRoot") : null;
@@ -884,155 +474,6 @@ const TableTennisGame = {
         if (mode === 'hold') targetRotX = -1.05;
         else if (mode === 'toss') targetRotX = -2.45;
         leftArm.rotation.x += (targetRotX - leftArm.rotation.x) * 16 * dt;
-    },
-
-    serveBall(server, servePower = 30, mode = 'up') {
-        const isCutServe = (server === 'player' && mode === 'down');
-        const isLongServe = (!isCutServe && servePower >= 50);
-        const pRatio = isLongServe ? Math.max(0, Math.min(1, (servePower - 50) / 50)) : 0;
-
-        if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(isLongServe);
-        this.trailIsSmash = isLongServe;
-        this.trailMode = isCutServe ? 'cut' : (isLongServe ? 'smash' : 'normal');
-        this.ballSpinAccel = 0;
-        this.ballHorizDrag = 0;
-        this.ballCurveAccelX = 0;
-        this.serveFlightHorizDrag = 0;
-        this.serveFlightCurveX = 0;
-        this.ballBounceScaleY = 0.82;
-        this.ballBounceScaleZ = 0.97;
-        this.netFault = false;
-        this.receiverBounces = 0;
-        this.lastReceiverBounceZ = null;
-        this.isServeFirstBounce = true;
-        this.isShortServeActive = (server === 'player' && !isLongServe);
-        this.servePhase = 'idle';
-        this.lastHitter = server;
-        this.npcReactionTimer = 0;
-        const effectType = isCutServe ? 'cut' : (isLongServe ? 'smash' : 'lob');
-        this.core.spawnHitEffect(this.ballPos, effectType);
-
-        const targetY = this.tableHeight + this.ballRadius;
-
-        if (server === 'player') {
-            this.playerHitType = isCutServe ? 'cut' : 'fore';
-            this.playerSwingTime = 0;
-
-            const aimDir = keys.a ? -1 : (keys.d ? 1 : 0);
-            const firstX = aimDir !== 0
-                ? aimDir * (0.35 + (isLongServe ? 0.25 : 0.15))
-                : this.playerGroup.position.x * 0.35 + (Math.random() - 0.5) * 0.25;
-
-            if (isCutServe) {
-                const cutRatio = Math.max(0, Math.min(1, servePower / 100));
-                const curveDir = keys.a ? -1 : (keys.d ? 1 : -1);
-                const firstZ = 1.18 + cutRatio * 0.28;
-                this.serveDestX = (aimDir !== 0 ? aimDir : curveDir) * (0.35 + cutRatio * 0.65);
-                this.serveDestZ = -(1.35 + cutRatio * 0.45);
-                this.serveFlightDuration = 0.54 + cutRatio * 0.08;
-                this.serveFlightSpin = 1.0 + cutRatio * 2.0;
-                this.serveFlightHorizDrag = cutRatio * 0.55;
-                this.serveFlightCurveX = curveDir * (cutRatio * 3.0);
-                this.serveNextBounceY = 0.92 - cutRatio * 0.10;
-                this.serveNextBounceZ = 0.90 - cutRatio * 0.16;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.24, 0));
-            } else if (isLongServe) {
-                const firstZ = 2.10 + pRatio * 0.25;
-                this.serveDestX = aimDir !== 0 ? aimDir * (1.15 + pRatio * 0.32) : (Math.random() - 0.5) * 0.45;
-                this.serveDestZ = -(2.15 + pRatio * 0.42);
-                this.serveFlightDuration = 0.50 - pRatio * 0.05;
-                this.serveFlightSpin = -4.5 - pRatio * 3.0;
-                this.serveNextBounceY = 0.75;
-                this.serveNextBounceZ = 1.06 + pRatio * 0.06;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.26, 0));
-            } else {
-                const firstZ = 1.15 + Math.random() * 0.15;
-                this.serveDestX = aimDir !== 0 ? aimDir * 1.05 : (Math.random() - 0.5) * 0.35;
-                this.serveDestZ = -(1.05 + Math.random() * 0.18);
-                this.serveFlightDuration = 0.56;
-                this.serveFlightSpin = 0;
-                this.serveNextBounceY = 0.84;
-                this.serveNextBounceZ = 0.88;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.25, 0));
-            }
-
-            this.playerCanHit = false;
-            this.npcCanHit = false;
-
-            if (this.onlineMode && typeof TTNetwork !== 'undefined') {
-                this.onlineSeq++;
-                const payload = {
-                    seq: this.onlineSeq,
-                    isServe: true,
-                    pos: { x: this.mirrorX(this.ballPos.x), y: this.ballPos.y, z: this.mirrorZ(this.ballPos.z) },
-                    vel: { x: this.mirrorX(this.ballVel.x), y: this.ballVel.y, z: this.mirrorZ(this.ballVel.z) },
-                    serveDestX: this.mirrorX(this.serveDestX),
-                    serveDestZ: this.mirrorZ(this.serveDestZ),
-                    serveFlightDuration: this.serveFlightDuration,
-                    serveFlightSpin: this.serveFlightSpin,
-                    serveFlightHorizDrag: this.serveFlightHorizDrag,
-                    serveFlightCurveX: this.mirrorX(this.serveFlightCurveX),
-                    serveNextBounceY: this.serveNextBounceY,
-                    serveNextBounceZ: this.serveNextBounceZ,
-                    hitType: this.playerHitType,
-                    trailMode: this.trailMode,
-                    effectType,
-                    isSmashSound: isLongServe
-                };
-                TTNetwork.send(this.onlineRole === 'host' ? 'host_serve' : 'guest_serve', payload);
-            }
-        } else {
-            this.npcHitType = 'fore';
-            this.npcSwingTime = 0;
-
-            const aimDir = npcLevel >= 3 ? (Math.random() > 0.5 ? 1 : -1) : 0;
-            const firstX = aimDir !== 0 ? aimDir * 0.45 : (Math.random() - 0.5) * 0.4;
-
-            if (isLongServe) {
-                const firstZ = -(2.10 + pRatio * 0.25);
-                this.serveDestX = aimDir !== 0 ? aimDir * (1.10 + pRatio * 0.25) : (Math.random() - 0.5) * 0.6;
-                this.serveDestZ = 2.10 + pRatio * 0.35;
-                this.serveFlightDuration = 0.51 - pRatio * 0.04;
-                this.serveFlightSpin = -4.5 - pRatio * 2.5;
-                this.serveNextBounceY = 0.76;
-                this.serveNextBounceZ = 1.05;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.26, 0));
-            } else {
-                const firstZ = -(1.15 + Math.random() * 0.15);
-                this.serveDestX = aimDir !== 0 ? aimDir * 0.95 : (Math.random() - 0.5) * 0.5;
-                this.serveDestZ = 1.05 + Math.random() * 0.18;
-                this.serveFlightDuration = 0.56;
-                this.serveFlightSpin = 0;
-                this.serveNextBounceY = 0.84;
-                this.serveNextBounceZ = 0.88;
-                this.ballVel.copy(this.computeBallVelocity(this.ballPos, new THREE.Vector3(firstX, targetY, firstZ), 0.25, 0));
-            }
-
-            this.playerCanHit = true;
-            this.npcCanHit = false;
-        }
-        gameState = 'rally';
-    },
-
-    getReachInfo(charPos, ballPos, isPlayer, maxReachXOverride = null) {
-        if (ballPos.y < 0.4 || ballPos.y > 2.9) {
-            return { inRange: false, isDive: false, dir: 0 };
-        }
-        const dx = ballPos.x - charPos.x;
-        const absX = Math.abs(dx);
-        const maxX = maxReachXOverride !== null ? maxReachXOverride : this.maxReachX;
-
-        const forwardDist = isPlayer ? (charPos.z - ballPos.z) : (ballPos.z - charPos.z);
-        if (forwardDist < -this.reachBackZ || forwardDist > this.reachFrontZ || absX > maxX) {
-            return { inRange: false, isDive: false, dir: 0 };
-        }
-
-        const isDive = absX > this.normalReachX;
-        return { inRange: true, isDive, dir: dx >= 0 ? 1 : -1 };
-    },
-
-    checkInRange(charPos, ballPos, isPlayer = true, maxReachXOverride = null) {
-        return this.getReachInfo(charPos, ballPos, isPlayer, maxReachXOverride).inRange;
     },
 
     stopCharging(mode = 'up') {
@@ -1058,279 +499,6 @@ const TableTennisGame = {
         }
         power = 0;
         if (typeof UIManager !== 'undefined') UIManager.updatePowerBar(0, 'up', 'tabletennis');
-    },
-
-    hitBall(hitter, hitPower, reachInfo = null, mode = 'up') {
-        const isStop = (hitter === 'player' && keys.s);
-        const isDownBtn = (hitter === 'player' && mode === 'down' && !isStop);
-        const isCut = (isDownBtn && hitPower >= 50);
-        const isPush = (isDownBtn && hitPower < 50);
-        const isDrive = (!isStop && !isDownBtn && hitPower >= 50);
-
-        const targetY = this.tableHeight + this.ballRadius;
-        this.isServeFirstBounce = false;
-        this.isShortServeActive = false;
-        this.netFault = false;
-        this.receiverBounces = 0;
-        this.lastReceiverBounceZ = null;
-        this.lastHitter = hitter;
-
-        if (hitter === 'player') {
-            const reach = reachInfo || this.getReachInfo(this.playerGroup.position, this.ballPos, true);
-            const relX = this.ballPos.x - this.playerGroup.position.x;
-            const isMiddle = !reach.isDive && Math.abs(relX) <= this.middleThresholdX;
-
-            this.playerHitType = isStop ? 'stop' : (isDownBtn ? 'cut' : (relX < -this.middleThresholdX ? 'back' : 'fore'));
-            this.playerSwingTime = 0;
-            this.playerCanHit = false;
-            this.npcCanHit = true;
-            this.npcReactionTimer = 0;
-
-            let tx = keys.a ? -1.10 : (keys.d ? 1.10 : (Math.random() - 0.5) * 0.65);
-            let tz = -1.65 - Math.random() * 0.55;
-            let duration = 0.78;
-            let spinAccel = 0;
-            let horizDrag = 0;
-            let bounceY = 0.84;
-            let bounceZ = 0.96;
-            let isSmashSound = false;
-            let effectType = 'lob';
-
-            if (reach.isDive) {
-                this.playerDiveTime = 0;
-                this.playerDiveDir = reach.dir;
-                this.playerRecoveryTime = this.recoveryDuration;
-
-                if (isDownBtn) {
-                    if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                    const pRatio = Math.max(0, Math.min(1, hitPower / 100));
-                    tx = keys.a ? -0.85 : (keys.d ? 0.85 : (Math.random() - 0.5) * 0.6);
-                    tz = -1.55 - pRatio * 0.35 - Math.random() * 0.25;
-                    duration = 0.76;
-                    spinAccel = 3.6 + pRatio * 1.2;
-                    horizDrag = 0.65 + pRatio * 0.25;
-                    bounceY = 0.62 - pRatio * 0.06;
-                    bounceZ = 0.75 - pRatio * 0.06;
-                    this.trailIsSmash = false;
-                    this.trailMode = 'cut';
-                    effectType = 'cut';
-                    this.core.spawnHitEffect(this.ballPos, 'cut');
-                    this.core.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.05, this.playerGroup.position.z), 0x00d8ff, 0.4, 1.8, 0.28, true, 0.7);
-                } else {
-                    if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                    tx = (Math.random() - 0.5) * 0.6;
-                    tz = -1.35 - Math.random() * 0.45;
-                    duration = 1.12;
-                    bounceY = 0.96;
-                    bounceZ = 0.84;
-                    this.trailIsSmash = false;
-                    this.trailMode = 'normal';
-                    effectType = 'lob';
-                    this.core.spawnHitEffect(this.ballPos, 'lob');
-                    this.core.spawnRing(new THREE.Vector3(this.playerGroup.position.x, 0.05, this.playerGroup.position.z), 0xffffff, 0.4, 1.8, 0.28, true, 0.65);
-                }
-            } else if (isMiddle) {
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                tx *= 0.4;
-                tz = -1.25 - Math.random() * 0.45;
-                duration = 0.94;
-                bounceY = 0.92;
-                bounceZ = 0.90;
-                this.trailIsSmash = false;
-                this.trailMode = 'normal';
-                effectType = 'drop';
-                this.core.spawnHitEffect(this.ballPos, 'drop');
-            } else if (isStop) {
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                tz = -0.82 - Math.random() * 0.25;
-                duration = 0.64;
-                this.trailIsSmash = false;
-                this.trailMode = 'normal';
-                effectType = 'drop';
-                this.core.spawnHitEffect(this.ballPos, 'drop');
-            } else if (isCut) {
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                const pRatio = Math.max(0, Math.min(1, (hitPower - 50) / 50));
-                if (keys.a) {
-                    tx = -(1.05 + pRatio * 0.35);
-                } else if (keys.d) {
-                    tx = (1.05 + pRatio * 0.35);
-                } else {
-                    tx = (Math.random() - 0.5) * 0.75;
-                }
-                tz = -1.35 - pRatio * 0.45 - Math.random() * 0.30;
-                duration = 0.72 + pRatio * 0.10;
-                spinAccel = 3.8 + pRatio * 1.4;
-                horizDrag = 0.75 + pRatio * 0.35;
-                bounceY = 0.60 - pRatio * 0.08;
-                bounceZ = 0.74 - pRatio * 0.08;
-                this.trailIsSmash = false;
-                this.trailMode = 'cut';
-                effectType = 'cut';
-                this.core.spawnHitEffect(this.ballPos, 'cut');
-            } else if (isPush) {
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                tz = -1.30 - Math.random() * 0.40;
-                duration = 0.52;
-                spinAccel = 2.0;
-                horizDrag = 0.35;
-                bounceY = 0.70;
-                bounceZ = 0.84;
-                this.trailIsSmash = false;
-                this.trailMode = 'normal';
-                effectType = 'drop';
-                this.core.spawnHitEffect(this.ballPos, 'drop');
-            } else if (isDrive) {
-                isSmashSound = true;
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(true);
-                const pRatio = Math.max(0, Math.min(1, (hitPower - 50) / 50));
-                if (keys.a) {
-                    tx = -(1.15 + pRatio * 0.40);
-                } else if (keys.d) {
-                    tx = (1.15 + pRatio * 0.40);
-                } else {
-                    tx = (Math.random() - 0.5) * (0.65 + pRatio * 0.90);
-                }
-                duration = 0.46 - pRatio * 0.19;
-                tz = -1.75 - pRatio * 0.35 - Math.random() * 0.25;
-                spinAccel = -14.0 - pRatio * 12.0;
-                bounceY = 0.70 - pRatio * 0.08;
-                bounceZ = 1.08 + pRatio * 0.14;
-                this.trailIsSmash = true;
-                this.trailMode = 'smash';
-                effectType = 'smash';
-                this.core.spawnHitEffect(this.ballPos, 'smash');
-            } else {
-                if (typeof BadmintonAudio !== 'undefined') BadmintonAudio.playHit(false);
-                const lowRatio = Math.max(0, Math.min(1, hitPower / 50));
-                duration = 0.86 - lowRatio * 0.18;
-                tz = -1.50 - Math.random() * 0.50;
-                bounceY = 0.86;
-                this.trailIsSmash = false;
-                this.trailMode = 'normal';
-                effectType = 'lob';
-                this.core.spawnHitEffect(this.ballPos, 'lob');
-            }
-
-            this.ballSpinAccel = spinAccel;
-            this.ballHorizDrag = horizDrag;
-            this.ballCurveAccelX = 0;
-            this.ballBounceScaleY = bounceY;
-            this.ballBounceScaleZ = bounceZ;
-            const target = new THREE.Vector3(tx, targetY, tz);
-            this.ballVel.copy(this.computeBallVelocity(this.ballPos, target, duration, spinAccel, horizDrag, 0));
-
-            if (this.onlineMode && typeof TTNetwork !== 'undefined') {
-                this.onlineSeq++;
-                const payload = {
-                    seq: this.onlineSeq,
-                    pos: { x: this.mirrorX(this.ballPos.x), y: this.ballPos.y, z: this.mirrorZ(this.ballPos.z) },
-                    vel: { x: this.mirrorX(this.ballVel.x), y: this.ballVel.y, z: this.mirrorZ(this.ballVel.z) },
-                    spin: this.ballSpinAccel,
-                    horizDrag: this.ballHorizDrag,
-                    curveX: this.mirrorX(this.ballCurveAccelX),
-                    bounceY: this.ballBounceScaleY,
-                    bounceZ: this.ballBounceScaleZ,
-                    hitType: this.playerHitType,
-                    trailMode: this.trailMode,
-                    effectType,
-                    isSmashSound,
-                    isDive: reach.isDive,
-                    diveDir: this.mirrorX(reach.dir)
-                };
-                TTNetwork.send(this.onlineRole === 'host' ? 'host_hit' : 'guest_hit', payload);
-            }
-        } else {
-            const reach = reachInfo || this.getReachInfo(this.npcGroup.position, this.ballPos, false);
-            const relX = this.ballPos.x - this.npcGroup.position.x;
-            const isMiddle = !reach.isDive && Math.abs(relX) <= this.middleThresholdX;
-
-            this.npcHitType = relX > this.middleThresholdX ? 'back' : 'fore';
-            this.npcSwingTime = 0;
-            this.npcCanHit = false;
-            this.playerCanHit = true;
-            this.npcReactionTimer = 0;
-
-            let tx = this.playerGroup.position.x > 0 ? -0.95 : 0.95;
-            if (npcLevel >= 3) {
-                tx = this.playerGroup.position.x > 0.35 ? -1.15 : (this.playerGroup.position.x < -0.35 ? 1.15 : (Math.random() > 0.5 ? 1.1 : -1.1));
-            }
-
-            let tz = 1.55 + Math.random() * 0.55;
-            let duration = 0.78;
-            let spinAccel = 0;
-            let bounceY = 0.84;
-            let bounceZ = 0.96;
-            let shotType = 'lob';
-
-            if (reach.isDive) {
-                this.npcDiveTime = 0;
-                this.npcDiveDir = reach.dir;
-                this.npcRecoveryTime = this.recoveryDuration;
-
-                tx = (Math.random() - 0.5) * 0.6;
-                tz = 1.35 + Math.random() * 0.45;
-                duration = 1.12;
-                bounceY = 0.96;
-                bounceZ = 0.84;
-                shotType = 'lob';
-                this.core.spawnRing(new THREE.Vector3(this.npcGroup.position.x, 0.05, this.npcGroup.position.z), 0xffffff, 0.4, 1.8, 0.28, true, 0.65);
-            } else if (isMiddle) {
-                tx = (Math.random() - 0.5) * 0.65;
-                tz = 1.25 + Math.random() * 0.45;
-                duration = 0.96;
-                bounceY = 0.93;
-                bounceZ = 0.90;
-                shotType = 'drop';
-            } else if (npcLevel === 4) {
-                const isHighBall = this.ballPos.y >= this.tableHeight + 0.35;
-                if (isHighBall) {
-                    duration = 0.36;
-                    tz = 1.90 + Math.random() * 0.35;
-                    spinAccel = -18.0;
-                    bounceY = 0.68;
-                    bounceZ = 1.14;
-                    shotType = 'smash';
-                } else if (Math.random() < 0.25) {
-                    duration = 0.65;
-                    tz = 0.82 + Math.random() * 0.25;
-                    shotType = 'drop';
-                } else {
-                    duration = 0.64;
-                }
-            } else if (npcLevel === 3) {
-                const isHighBall = this.ballPos.y >= this.tableHeight + 0.38;
-                if (isHighBall && Math.random() < 0.5) {
-                    duration = 0.44;
-                    tz = 1.80 + Math.random() * 0.4;
-                    spinAccel = -14.0;
-                    bounceY = 0.72;
-                    bounceZ = 1.08;
-                    shotType = 'smash';
-                } else {
-                    duration = 0.70;
-                }
-            } else if (npcLevel === 2) {
-                duration = 0.76;
-            } else {
-                tx = (Math.random() - 0.5) * 1.25;
-                duration = 0.86;
-            }
-
-            if (typeof BadmintonAudio !== 'undefined') {
-                BadmintonAudio.playHit(shotType === 'smash');
-            }
-            this.ballSpinAccel = spinAccel;
-            this.ballHorizDrag = 0;
-            this.ballCurveAccelX = 0;
-            this.ballBounceScaleY = bounceY;
-            this.ballBounceScaleZ = bounceZ;
-            this.trailIsSmash = (shotType === 'smash');
-            this.trailMode = (shotType === 'smash') ? 'smash' : 'normal';
-            this.core.spawnHitEffect(this.ballPos, shotType);
-            const target = new THREE.Vector3(tx, targetY, tz);
-            this.ballVel.copy(this.computeBallVelocity(this.ballPos, target, duration, spinAccel));
-        }
     },
 
     // 通信対戦：相手からのデータ受信ハンドラ
@@ -1384,6 +552,7 @@ const TableTennisGame = {
                 this.ballBounceScaleY = 0.82;
                 this.ballBounceScaleZ = 0.97;
                 this.netFault = false;
+                this.incomingCutMissProb = data.cutMissProb || 0;
                 this.receiverBounces = 0;
                 this.lastReceiverBounceZ = null;
                 this.isServeFirstBounce = true;
@@ -1424,6 +593,7 @@ const TableTennisGame = {
                 this.isServeFirstBounce = false;
                 this.isShortServeActive = false;
                 this.netFault = false;
+                this.incomingCutMissProb = data.cutMissProb || 0;
                 this.receiverBounces = 0;
                 this.lastReceiverBounceZ = null;
                 this.lastHitter = 'npc';
@@ -1541,91 +711,6 @@ const TableTennisGame = {
         this.npcGroup.position.z += (this.remoteState.targetZ - this.npcGroup.position.z) * factor;
     },
 
-    updateNPC(dt) {
-        if (this.onlineMode) {
-            this.updateRemoteOpponent(dt);
-            return;
-        }
-        if (gameState !== 'rally') return;
-
-        // 飛びつきジャンプ中は横方向へ飛び込み、終了後はリカバリー遅延に入る
-        if (this.npcDiveTime >= 0) {
-            this.npcGroup.position.x += this.npcDiveDir * 2.6 * dt;
-            this.npcGroup.position.x = Math.max(-this.limitX, Math.min(this.limitX, this.npcGroup.position.x));
-            return;
-        }
-
-        let speed = this.npcBaseSpeed;
-        if (npcLevel === 2) speed = this.npcBaseSpeed * 1.18;
-        if (npcLevel === 3) speed = this.npcBaseSpeed * 1.32;
-        if (npcLevel === 4) speed = this.npcBaseSpeed * 1.50;
-        if (this.npcRecoveryTime > 0) speed *= 0.30;
-
-        let targetX = 0;
-        let targetZ = -3.8;
-
-        if (this.lastHitter === 'player') {
-            this.npcReactionTimer += dt;
-            const reactionDelay = (npcLevel === 1) ? 0.46 : (npcLevel === 2) ? 0.40 : (npcLevel === 3) ? 0.37 : 0.29;
-
-            if (this.npcReactionTimer < reactionDelay) {
-                targetX = this.npcGroup.position.x;
-                targetZ = this.npcGroup.position.z;
-            } else if (npcLevel >= 3) {
-                if (this.isShortServeActive) {
-                    const aimX = this.isServeFirstBounce ? this.serveDestX : this.ballPos.x;
-                    targetX = Math.max(-this.limitX, Math.min(this.limitX, aimX + 0.42));
-                    targetZ = this.npcZMax;
-                } else if (this.isServeFirstBounce) {
-                    targetX = Math.max(-this.limitX, Math.min(this.limitX, this.serveDestX + 0.48));
-                    targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, this.serveDestZ - 1.75));
-                } else {
-                    const info = this.predictBallInfo(-2.3);
-                    const bz = (this.receiverBounces >= 1 && this.lastReceiverBounceZ !== null)
-                        ? this.lastReceiverBounceZ
-                        : (info.bounce ? info.bounce.z : (info.hit ? info.hit.z : this.ballPos.z));
-                    const px = info.hit ? info.hit.x : (info.bounce ? info.bounce.x : this.ballPos.x);
-                    targetX = Math.max(-this.limitX, Math.min(this.limitX, px + 0.48));
-                    targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, bz - 1.75));
-                }
-            } else {
-                targetX = Math.max(-this.limitX, Math.min(this.limitX, this.ballPos.x + 0.42));
-                targetZ = Math.max(this.npcZMin, Math.min(this.npcZMax, this.ballPos.z - 0.65));
-            }
-        } else {
-            this.npcReactionTimer = 0;
-            if (npcLevel === 1) {
-                targetX = this.npcGroup.position.x;
-                targetZ = this.npcGroup.position.z;
-            } else if (npcLevel === 2) {
-                targetX = 0;
-                targetZ = -3.8;
-                speed *= 0.4;
-            } else {
-                targetX = 0;
-                targetZ = -3.8;
-            }
-        }
-
-        const dx = targetX - this.npcGroup.position.x;
-        const dz = targetZ - this.npcGroup.position.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist > 0.14) {
-            this.npcGroup.position.x += (dx / dist) * speed * dt;
-            this.npcGroup.position.z += (dz / dist) * speed * dt;
-            this.npcGroup.position.x = Math.max(-this.limitX, Math.min(this.limitX, this.npcGroup.position.x));
-            this.npcGroup.position.z = Math.max(this.npcZMin, Math.min(this.npcZMax, this.npcGroup.position.z));
-        }
-
-        if (this.npcCanHit && this.receiverBounces === 1 && this.ballPos.z < -0.2) {
-            const npcMaxX = npcLevel >= 3 ? this.maxReachX * 0.96 : this.maxReachX * 0.88;
-            const reach = this.getReachInfo(this.npcGroup.position, this.ballPos, false, npcMaxX);
-            if (reach.inRange) {
-                this.hitBall('npc', 70, reach);
-            }
-        }
-    },
-
     resetDivePose(group) {
         const bodyM = group === this.playerGroup ? this.activePlayerBody : (group === this.npcGroup ? this.activeNpcBody : null);
         if (bodyM) {
@@ -1663,48 +748,6 @@ const TableTennisGame = {
                 bodyM.rotation.z += (0 - bodyM.rotation.z) * 14 * dt;
             }
         }
-    },
-
-    predictBallInfo(targetZ) {
-        const p = this._predPos.copy(this.ballPos);
-        const v = this._predVel.copy(this.ballVel);
-        let spin = this.ballSpinAccel;
-        let horizDrag = this.ballHorizDrag;
-        let curveX = this.ballCurveAccelX;
-        const step = 0.03;
-        let hasBounce = false;
-        let hasHit = false;
-
-        for (let i = 0; i < 80; i++) {
-            v.x += curveX * step;
-            v.y += (this.gravity + spin) * step;
-            if (horizDrag > 0) {
-                const hf = Math.exp(-horizDrag * step);
-                v.x *= hf;
-                v.z *= hf;
-            }
-            p.addScaledVector(v, step);
-            if (p.y <= this.tableHeight + this.ballRadius && v.y < 0 && Math.abs(p.x) <= this.tableWidth / 2 && Math.abs(p.z) <= this.tableLength / 2) {
-                p.y = this.tableHeight + this.ballRadius;
-                if (!hasBounce && p.z < 0) {
-                    this._predBounce.copy(p);
-                    hasBounce = true;
-                }
-                v.y = Math.abs(v.y) * this.ballBounceScaleY;
-                v.z *= this.ballBounceScaleZ;
-                spin = 0;
-                horizDrag = 0;
-                curveX *= 0.25;
-            }
-            if (!hasHit && p.z <= targetZ) {
-                this._predHit.copy(p);
-                hasHit = true;
-            }
-            if (hasBounce && hasHit) break;
-        }
-        this._predResult.bounce = hasBounce ? this._predBounce : null;
-        this._predResult.hit = hasHit ? this._predHit : null;
-        return this._predResult;
     },
 
     applyBackhandSwingAnimation(group, isPlayer, swingTime, dt) {
@@ -1802,58 +845,6 @@ const TableTennisGame = {
                     this.resetToServe(nextServer);
                 }
             }, 2000);
-        }
-    },
-
-    updateChargeVFX(dt) {
-        if (!this.chargeRing) return;
-        if (isCharging && (gameState === 'rally' || gameState === 'serve-player')) {
-            const isCutMode = (chargeMode === 'down');
-            if (isCutMode) {
-                this.chargeRing.visible = true;
-                this.chargeRing.material.color.setHex(power >= 50 ? 0x00e5ff : 0x70f0ff);
-                this.chargeRing.material.opacity = power >= 50 ? 0.92 : 0.50;
-                const pulse = 1 + Math.sin(this.core.idleTime * 12) * 0.06;
-                this.chargeRing.scale.setScalar(pulse);
-
-                this.chargeSparkTimer += dt;
-                if (this.chargeSparkTimer >= (power >= 50 ? 0.045 : 0.09)) {
-                    this.chargeSparkTimer = 0;
-                    const angle = Math.random() * Math.PI * 2;
-                    const rad = 0.35 + Math.random() * 0.5;
-                    this._tmpVec3D.set(
-                        this.playerGroup.position.x + Math.cos(angle) * rad,
-                        0.12,
-                        this.playerGroup.position.z + Math.sin(angle) * rad
-                    );
-                    this.core.spawnSparks(this._tmpVec3D, power >= 50 ? 0x00d8ff : 0x8ef5ff, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
-                }
-            } else if (power >= 50) {
-                this.chargeRing.visible = true;
-                this.chargeRing.material.color.setHex(power >= 95 ? 0xff3b30 : 0xff9500);
-                this.chargeRing.material.opacity = 0.85;
-                const pulse = 1 + Math.sin(this.core.idleTime * 12) * 0.06;
-                this.chargeRing.scale.setScalar(pulse);
-
-                this.chargeSparkTimer += dt;
-                if (this.chargeSparkTimer >= 0.045) {
-                    this.chargeSparkTimer = 0;
-                    const angle = Math.random() * Math.PI * 2;
-                    const rad = 0.35 + Math.random() * 0.5;
-                    this._tmpVec3D.set(
-                        this.playerGroup.position.x + Math.cos(angle) * rad,
-                        0.12,
-                        this.playerGroup.position.z + Math.sin(angle) * rad
-                    );
-                    this.core.spawnSparks(this._tmpVec3D, power >= 95 ? 0xff4500 : 0xffd700, 1, 2.0, 4.2, 0.34, 0.85, 1.0);
-                }
-            } else {
-                this.chargeRing.visible = false;
-                this.chargeSparkTimer = 0;
-            }
-        } else {
-            this.chargeRing.visible = false;
-            this.chargeSparkTimer = 0;
         }
     },
 
